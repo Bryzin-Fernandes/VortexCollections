@@ -5,6 +5,8 @@ const cors = require('cors');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
 const { Pool } = require('pg');
 
 const app = express();
@@ -23,7 +25,7 @@ const products = new Map([
 
 function requiredEnv() {
   for (const name of ['DATABASE_URL', 'JWT_SECRET', 'LICENSE_SECRET', 'MP_ACCESS_TOKEN']) {
-    if (!process.env[name]) throw new Error(`Variável ausente: ${name}`);
+    if (!process.env[name]) throw new Error(`VariÃ¡vel ausente: ${name}`);
   }
 }
 
@@ -38,7 +40,7 @@ function auth(req, res, next) {
     req.user = jwt.verify(token, process.env.JWT_SECRET);
     next();
   } catch (_) {
-    res.status(401).json({ error: 'Não autenticado.' });
+    res.status(401).json({ error: 'NÃ£o autenticado.' });
   }
 }
 
@@ -82,19 +84,19 @@ app.get('/health', async (_req, res) => {
 app.post('/api/auth/register', async (req, res) => {
   try {
     const { name, email, password } = req.body || {};
-    if (!name || !email || !password || password.length < 8) return res.status(400).json({ error: 'Nome, e-mail e senha de 8 caracteres são obrigatórios.' });
+    if (!name || !email || !password || password.length < 8) return res.status(400).json({ error: 'Nome, e-mail e senha de 8 caracteres sÃ£o obrigatÃ³rios.' });
     const hash = await bcrypt.hash(password, 12);
     const { rows } = await pool.query('INSERT INTO users (name, email, password_hash) VALUES ($1, LOWER($2), $3) RETURNING id, name, email, role', [name.trim(), email.trim(), hash]);
     res.status(201).json({ user: rows[0], token: issueToken(rows[0]) });
   } catch (error) {
-    res.status(error.code === '23505' ? 409 : 500).json({ error: error.code === '23505' ? 'E-mail já cadastrado.' : 'Não foi possível criar a conta.' });
+    res.status(error.code === '23505' ? 409 : 500).json({ error: error.code === '23505' ? 'E-mail jÃ¡ cadastrado.' : 'NÃ£o foi possÃ­vel criar a conta.' });
   }
 });
 
 app.post('/api/auth/login', async (req, res) => {
   const { email, password } = req.body || {};
   const { rows } = await pool.query('SELECT id, name, email, role, password_hash FROM users WHERE email = LOWER($1)', [email || '']);
-  if (!rows[0] || !(await bcrypt.compare(password || '', rows[0].password_hash))) return res.status(401).json({ error: 'E-mail ou senha inválidos.' });
+  if (!rows[0] || !(await bcrypt.compare(password || '', rows[0].password_hash))) return res.status(401).json({ error: 'E-mail ou senha invÃ¡lidos.' });
   const user = rows[0]; delete user.password_hash;
   res.json({ user, token: issueToken(user) });
 });
@@ -102,7 +104,7 @@ app.post('/api/auth/login', async (req, res) => {
 app.post('/api/checkout', auth, async (req, res) => {
   const { product: slug } = req.body || {};
   const product = products.get(slug);
-  if (!product || product.price === 0) return res.status(400).json({ error: 'Produto inválido ou sem preço definido.' });
+  if (!product || product.price === 0) return res.status(400).json({ error: 'Produto invÃ¡lido ou sem preÃ§o definido.' });
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -116,7 +118,7 @@ app.post('/api/checkout', auth, async (req, res) => {
     await client.query('UPDATE orders SET mercado_pago_id = $1 WHERE id = $2', [preference.id, order.id]);
     await client.query('COMMIT');
     res.status(201).json({ checkout_url: preference.init_point, order_id: order.id });
-  } catch (error) { await client.query('ROLLBACK'); res.status(500).json({ error: 'Não foi possível criar o checkout.' }); }
+  } catch (error) { await client.query('ROLLBACK'); res.status(500).json({ error: 'NÃ£o foi possÃ­vel criar o checkout.' }); }
   finally { client.release(); }
 });
 
@@ -135,7 +137,7 @@ app.post('/api/mercadopago/webhook', async (req, res) => {
       await client.query('UPDATE orders SET status = \'approved\' WHERE id = $1', [order.order_id]);
       const key = await provisionLicense(client, order);
       await client.query('COMMIT');
-      if (key) console.log(`Licença criada para o pedido ${order.order_id}: ${key}`);
+      if (key) console.log(`LicenÃ§a criada para o pedido ${order.order_id}: ${key}`);
     } catch (error) { await client.query('ROLLBACK'); console.error(error); }
     finally { client.release(); }
   } catch (error) { console.error('Webhook Mercado Pago:', error.message); }
@@ -148,9 +150,9 @@ app.get('/api/me/licenses', auth, async (req, res) => {
 
 app.post('/api/licenses/:id/ip', auth, async (req, res) => {
   const { ip, label } = req.body || {};
-  if (!ip) return res.status(400).json({ error: 'IP obrigatório.' });
+  if (!ip) return res.status(400).json({ error: 'IP obrigatÃ³rio.' });
   const result = await pool.query(`INSERT INTO authorized_ips (license_id, ip_address, label) SELECT id, $1::inet, $2 FROM licenses WHERE id=$3 AND user_id=$4 AND status='active' ON CONFLICT DO NOTHING RETURNING id, ip_address, label`, [ip.trim(), label || null, req.params.id, req.user.sub]);
-  if (!result.rowCount) return res.status(404).json({ error: 'Licença não encontrada ou IP já autorizado.' });
+  if (!result.rowCount) return res.status(404).json({ error: 'LicenÃ§a nÃ£o encontrada ou IP jÃ¡ autorizado.' });
   res.status(201).json(result.rows[0]);
 });
 
@@ -166,5 +168,15 @@ app.post('/api/license/verify', async (req, res) => {
   res.json({ valid: true, ip_authorized: true });
 });
 
-requiredEnv();
-app.listen(port, '0.0.0.0', () => console.log(`Vortex API ouvindo na porta ${port}`));
+async function start() {
+  requiredEnv();
+  const schemaPath = path.join(__dirname, 'schema.sql');
+  const schema = fs.readFileSync(schemaPath, 'utf8');
+  await pool.query(schema);
+  app.listen(port, '0.0.0.0', () => console.log(`Vortex API ouvindo na porta ${port}`));
+}
+
+start().catch(error => {
+  console.error('NÃ£o foi possÃ­vel iniciar a API ou preparar o banco:', error);
+  process.exit(1);
+});

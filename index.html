@@ -9,6 +9,9 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="customer.css" />
+  <link rel="stylesheet" href="theme.css" />
+  <link rel="preload" as="image" href="minecraft-landscape.png" />
 </head>
 <body>
   <div class="glow glow-one"></div><div class="glow glow-two"></div>
@@ -27,7 +30,7 @@
         <h1>Seu servidor.<br><em>Outro nível.</em></h1>
         <p>Plugins Minecraft desenvolvidos para deixar sua rede mais completa, profissional e pronta para crescer.</p>
         <div class="hero-actions"><a class="btn btn-primary" href="#produtos">Explorar plugins <span>→</span></a><a class="btn btn-ghost" href="#video">Ver demonstração <span>▶</span></a></div>
-        <div class="hero-meta"><div><strong>1.8.8+</strong><small>Compatibilidade</small></div><div><strong>24/7</strong><small>Suporte dedicado</small></div><div><strong>100%</strong><small>Foco em performance</small></div></div>
+        <div class="hero-meta"><div><strong>Java 8</strong><small>Base dos plugins</small></div><div><strong>4 plugins</strong><small>Explore o catálogo</small></div><div><strong>1 IP</strong><small>Por licença</small></div></div>
       </div>
       <div class="hero-art"><div class="orbit orbit-a"></div><div class="orbit orbit-b"></div><div class="cube"><span>V</span></div><div class="art-tag tag-top">JAVA <b>8</b></div><div class="art-tag tag-bottom">MINECRAFT <b>1.8.8+</b></div></div>
     </section>
@@ -46,6 +49,7 @@
     <section id="video" class="section container video-section"><div class="video-frame"><div class="video-overlay"><a class="play" href="https://www.youtube.com/watch?v=MoNmfUgpA4A" target="_blank" rel="noopener">▶</a><span>ASSISTA AO VORTEXFEAST EM AÇÃO</span><strong>Veja como o evento transforma a experiência do seu servidor.</strong></div><div class="video-lines"></div></div></section>
 
     <section id="sobre" class="section about container"><div class="about-mark">V</div><div><span class="section-kicker">SOMOS NÓS</span><h2>Construído por quem<br><span>vive Minecraft.</span></h2><p>A Vortex Collections nasceu para criar ferramentas que resolvem problemas reais de servidores. Cada sistema é pensado para ser funcional, bonito e fácil de administrar.</p><a class="contact-link" href="https://wa.me/5534998170791" target="_blank" rel="noopener">Fale com a gente no WhatsApp <span>↗</span></a></div></section>
+    <section class="community container" id="discord"><div><span class="section-kicker">NOSSA COMUNIDADE</span><h2>Seu próximo lobby é aqui.</h2><p>Entre no Discord da Vortex Collections para conversar sobre os plugins e acompanhar a comunidade.</p></div><a class="btn discord-btn" href="https://discord.gg/FabjYWPA9k" target="_blank" rel="noopener noreferrer">Entrar no Discord ↗</a></section>
   </main>
   <footer><div class="container footer-inner"><a class="brand" href="#inicio"><span class="brand-mark">V</span><span>VORTEX<span class="muted">COLLECTIONS</span></span></a><span>© 2026 Vortex Collections. Todos os direitos reservados.</span><a href="regras.html">Regras de uso e licença ↗</a></div></footer>
 
@@ -53,4 +57,5 @@
   <div class="modal" id="register-modal" aria-hidden="true"><div class="modal-box"><button class="close" data-close>×</button><span class="section-kicker">NOVO CLIENTE</span><h2>Crie sua conta.</h2><p>Use o mesmo e-mail da compra para receber automaticamente sua chave de licença.</p><form id="register-form"><label>Nome<input type="text" required placeholder="Seu nome"></label><label>E-mail<input type="email" required placeholder="voce@exemplo.com"></label><label>Senha<input type="password" minlength="8" required placeholder="Mínimo de 8 caracteres"></label><button class="btn btn-primary full">Cadastrar <span>→</span></button></form><small class="modal-note">A chave é criada no servidor somente após a confirmação do Mercado Pago.</small></div></div>
   <div class="modal" id="buy-modal" aria-hidden="true"><div class="modal-box"><button class="close" data-close>×</button><span class="section-kicker">COMPRA SEGURA</span><h2 id="buy-title">Comprar plugin</h2><p>Você será levado ao checkout seguro do Mercado Pago. Depois da aprovação, o produto aparecerá na sua área do cliente.</p><div class="checkout-summary"><span>Produto selecionado</span><strong id="buy-price">—</strong></div><button class="btn btn-primary full" id="checkout-btn">Continuar para pagamento <span>→</span></button><small class="modal-note">A integração real usa o token do Mercado Pago somente no backend.</small></div></div>
   <script src="app.js"></script>
+  <script src="visual.js" defer></script>
 </body></html>

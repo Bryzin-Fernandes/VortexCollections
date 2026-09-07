@@ -65,7 +65,8 @@ $('#register-form').addEventListener('submit', async e => {
 
 // Painel autenticado: produtos e permissões vêm da API, nunca do armazenamento local.
 const customerStyle = document.createElement('link');
-customerStyle.rel = 'stylesheet'; customerStyle.href = 'customer.css'; document.head.append(customerStyle);
+customerStyle.rel = 'stylesheet'; customerStyle.href = 'customer.css';
+if (!document.querySelector('link[href="customer.css"]')) document.head.append(customerStyle);
 const customerPanel = document.createElement('section');
 customerPanel.id = 'customer-panel'; customerPanel.hidden = true;
 customerPanel.innerHTML = `<div class="customer-head"><div><span class="section-kicker">VORTEX COLLECTIONS</span><h1>Minha área</h1><p id="customer-welcome"></p></div><div class="customer-actions"><button id="customer-store" class="btn btn-outline">Voltar à loja</button><button id="customer-refresh" class="btn btn-outline">Atualizar</button><button id="customer-logout" class="btn btn-outline">Sair</button></div></div>

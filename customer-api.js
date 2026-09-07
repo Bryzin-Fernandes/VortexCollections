@@ -75,9 +75,22 @@ function install({ app, pool, auth, bcrypt, vault, fingerprint, createLicenseKey
   app.post('/api/licenses/:id/ip', auth, wrap(async (req, res) => {
     const ip = typeof req.body.ip === 'string' ? req.body.ip.trim() : '';
     if (!net.isIP(ip) || !/^\d+$/.test(req.params.id)) return res.status(400).json({ error: 'Informe um IPv4 ou IPv6, sem porta, domínio ou máscara.' });
-    if (!await owned(req.user.sub, req.params.id)) return res.status(404).json({ error: 'Licença indisponível.' });
-    await pool.query('INSERT INTO authorized_ips (license_id,ip_address) VALUES ($1,$2::inet) ON CONFLICT DO NOTHING', [req.params.id, ip]);
-    res.json({ ok: true });
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query('SELECT id FROM licenses WHERE id=$1 AND user_id=$2 FOR UPDATE', [req.params.id, req.user.sub]);
+      if (!await owned(req.user.sub, req.params.id, client)) {
+        await client.query('ROLLBACK'); return res.status(404).json({ error: 'Licença indisponível.' });
+      }
+      const existing = (await client.query('SELECT ip_address=$2::inet AS same FROM authorized_ips WHERE license_id=$1', [req.params.id, ip])).rows;
+      if (existing.length > 1 || (existing.length === 1 && !existing[0].same)) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ error: 'Cada licença permite apenas um IP. Remova o IP anterior antes de autorizar outro.' });
+      }
+      if (!existing.length) await client.query('INSERT INTO authorized_ips (license_id,ip_address) VALUES ($1,$2::inet)', [req.params.id, ip]);
+      await client.query('COMMIT');
+      res.json({ ok: true });
+    } catch (error) { await client.query('ROLLBACK'); throw error; } finally { client.release(); }
   }));
   app.delete('/api/licenses/:id/ip', auth, wrap(async (req, res) => {
     const ip = typeof req.body.ip === 'string' ? req.body.ip.trim() : '';
@@ -104,21 +117,15 @@ function install({ app, pool, auth, bcrypt, vault, fingerprint, createLicenseKey
     const { key, product } = req.body || {};
     // Não confia no IP declarado pelo plugin: usa o IP de origem observado pelo proxy confiável.
     const observed = (req.ip || '').replace(/^::ffff:/, '');
-    const originalJson = res.json.bind(res);
-
-res.json = function (body) {
-  return originalJson({
-    ...body,
-    server_ip: observed
-  });
-};
+    const sendJson = res.json.bind(res);
+    res.json = body => sendJson({ ...body, server_ip: observed });
     if (typeof key !== 'string' || key.length > 160 || typeof product !== 'string' || !net.isIP(observed))
       return res.status(400).json({ valid: false, ip_authorized: false });
     const license = (await pool.query(`SELECT l.id,l.license_key_hash FROM licenses l JOIN products p ON p.id=l.product_id
       JOIN orders o ON o.id=l.order_id WHERE l.license_key_fingerprint=$1 AND p.slug=$2
       AND l.status='active' AND o.status='approved'`, [fingerprint(key.trim()), product])).rows[0];
     if (!license || !await bcrypt.compare(key.trim(), license.license_key_hash)) return res.status(403).json({ valid: false, ip_authorized: false });
-    const result = await pool.query('UPDATE authorized_ips SET last_seen_at=NOW() WHERE license_id=$1 AND ip_address=$2::inet RETURNING id', [license.id, observed]);
+    const result = await pool.query('UPDATE authorized_ips SET last_seen_at=NOW() WHERE license_id=$1 AND ip_address=$2::inet AND (SELECT COUNT(*) FROM authorized_ips WHERE license_id=$1)=1 RETURNING id', [license.id, observed]);
     res.status(result.rowCount ? 200 : 403).json({ valid: true, ip_authorized: Boolean(result.rowCount) });
   }));
   async function confirmPayment(id, owner) {

@@ -74,6 +74,9 @@ customerPanel.innerHTML = `<div class="customer-head"><div><span class="section-
 <h2>Meus pedidos</h2><div id="customer-orders"></div>
 <details class="customer-reconcile"><summary>Já paguei, mas meu plugin não apareceu</summary><p>Use a mesma conta em que comprou. Digite o número do pagamento do Mercado Pago para consultar a aprovação.</p><form id="customer-reconcile"><label>Número do pagamento<input name="payment_id" inputmode="numeric" pattern="[0-9]+" required maxlength="30"></label><button class="btn btn-primary">Consultar pagamento</button></form></details>`;
 document.querySelector('main').after(customerPanel);
+const customerRules = document.createElement('a');
+customerRules.href = 'regras.html'; customerRules.className = 'btn btn-outline'; customerRules.textContent = 'Regras';
+customerPanel.querySelector('.customer-actions').append(customerRules);
 let customerLoad = 0;
 const customerMessage = text => { $('#customer-message').textContent = text; };
 function customerRequest(path, options = {}) {
@@ -121,9 +124,11 @@ function renderLicense(license) {
       await showCustomer(); customerMessage('Nova chave emitida. Atualize o config.yml do seu servidor.');
     }));
   } else card.append(element('p', 'Não foi possível abrir a chave. Contate o suporte; não altere LICENSE_SECRET.'));
-  card.append(element('h4', 'IPs autorizados'));
+  const ips = license.authorized_ips || [];
+  card.append(element('h4', 'IP autorizado · ' + ips.length + '/1'));
+  if (ips.length > 1) card.append(element('p', 'Esta licença possui IPs extras. Remova os extras e mantenha apenas um para liberar a validação do plugin.', 'ip-warning'));
   const list = element('ul');
-  for (const ip of license.authorized_ips || []) {
+  for (const ip of ips) {
     const item = element('li'); item.append(element('code', ip), action('Remover', async () => {
       if (!confirm('Remover este IP? O plugin nesse servidor perderá a autorização.')) return;
       await customerRequest('/api/licenses/' + license.id + '/ip', { method: 'DELETE', body: JSON.stringify({ ip }) }); await showCustomer();
@@ -131,11 +136,13 @@ function renderLicense(license) {
   }
   if (!list.children.length) list.append(element('li', 'Nenhum IP autorizado.'));
   card.append(list, element('p', 'Cadastre o IP público de saída do servidor, sem porta. Pode ser diferente do endereço usado para jogar.'));
+  card.append(element('p', 'Uma licença permite um único IP por vez. Para trocar de hospedagem, remova o IP antigo e autorize o novo.'));
   const form = element('form');
   const label = element('label', 'IP do servidor'); const input = element('input'); input.required = true; input.placeholder = '203.0.113.10 ou IPv6'; label.append(input);
   const submit = element('button', 'Autorizar IP', 'btn btn-outline'); submit.type = 'submit'; form.append(label, submit);
+  input.disabled = submit.disabled = ips.length > 0;
   form.addEventListener('submit', async event => {
-    event.preventDefault(); submit.disabled = true;
+    event.preventDefault(); if (ips.length > 0) return; submit.disabled = true;
     try { await customerRequest('/api/licenses/' + license.id + '/ip', { method: 'POST', body: JSON.stringify({ ip: input.value.trim() }) }); await showCustomer(); }
     catch (error) { customerError(error); } finally { submit.disabled = false; }
   }); card.append(form);

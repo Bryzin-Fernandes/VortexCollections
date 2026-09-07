@@ -34,7 +34,7 @@ $('#checkout-btn').addEventListener('click', async () => {
   const token = localStorage.getItem('vortex_token');
   if (!token) { closeModals(); openModal('#login-modal'); alert('Faça login ou crie sua conta antes de comprar.'); return; }
   try {
-    const result = await apiRequest('/api/checkout', { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify({ product: productSlugs[selectedProduct] }) });
+    const result = await apiRequest('/api/checkout', { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify({ product: productSlugs[selectedProduct], coupon: $('#checkout-coupon').value.trim() }) });
     window.location.href = result.checkout_url;
   } catch (error) { alert(error.message); }
 });
@@ -78,6 +78,8 @@ document.querySelector('main').after(customerPanel);
 const customerRules = document.createElement('a');
 customerRules.href = 'regras.html'; customerRules.className = 'btn btn-outline'; customerRules.textContent = 'Regras';
 customerPanel.querySelector('.customer-actions').append(customerRules);
+const supportLink = element('a', 'Suporte', 'btn btn-outline'); supportLink.href = 'suporte.html'; customerPanel.querySelector('.customer-actions').append(supportLink);
+const plansLink = element('a', 'Planos', 'btn btn-outline'); plansLink.href = 'planos.html'; customerPanel.querySelector('.customer-actions').append(plansLink);
 let customerLoad = 0;
 const customerMessage = text => { $('#customer-message').textContent = text; };
 function customerRequest(path, options = {}) {
@@ -169,6 +171,7 @@ async function showCustomer() {
     const [user, licenses, orders] = await Promise.all([customerRequest('/api/me'), customerRequest('/api/me/licenses'), customerRequest('/api/me/orders')]);
     if (load !== customerLoad) return;
     $('#customer-welcome').textContent = user.name + ' · ' + user.email;
+    if (user.role === 'admin' && !customerPanel.querySelector('[data-admin-link]')) { const adminLink = element('a', 'Administração', 'btn btn-outline'); adminLink.href = 'admin.html'; adminLink.dataset.adminLink = 'true'; customerPanel.querySelector('.customer-actions').append(adminLink); }
     if (!licenses.length) $('#customer-licenses').append(element('p', 'Nenhum plugin liberado ainda. Veja o status dos seus pedidos abaixo.'));
     else licenses.forEach(license => $('#customer-licenses').append(renderLicense(license)));
     const statuses = { approved: 'Aprovado', pending: 'Aguardando pagamento', rejected: 'Recusado', cancelled: 'Cancelado' };

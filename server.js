@@ -8,6 +8,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const { Pool } = require('pg');
+const vault = require('./license-vault');
 
 const app = express();
 const port = Number(process.env.PORT || 10000);
@@ -25,7 +26,7 @@ const products = new Map([
 
 function requiredEnv() {
   for (const name of ['DATABASE_URL', 'JWT_SECRET', 'LICENSE_SECRET', 'MP_ACCESS_TOKEN']) {
-    if (!process.env[name]) throw new Error(`VariÃ¡vel ausente: ${name}`);
+    if (!process.env[name]) throw new Error(`Variável ausente: ${name}`);
   }
 }
 
@@ -40,7 +41,7 @@ function auth(req, res, next) {
     req.user = jwt.verify(token, process.env.JWT_SECRET);
     next();
   } catch (_) {
-    res.status(401).json({ error: 'NÃ£o autenticado.' });
+    res.status(401).json({ error: 'Não autenticado.' });
   }
 }
 
@@ -68,13 +69,15 @@ async function provisionLicense(client, order) {
   const key = createLicenseKey(order.product_slug);
   const keyHash = await bcrypt.hash(key, 12);
   const result = await client.query(`
-    INSERT INTO licenses (order_id, user_id, product_id, license_key_fingerprint, license_key_hash)
-    VALUES ($1, $2, $3, $4, $5)
+    INSERT INTO licenses (order_id, user_id, product_id, license_key_fingerprint, license_key_hash, key_encrypted)
+    VALUES ($1, $2, $3, $4, $5, $6)
     ON CONFLICT (order_id) DO NOTHING
     RETURNING id
-  `, [order.order_id, order.user_id, order.product_id, fingerprint(key), keyHash]);
+  `, [order.order_id, order.user_id, order.product_id, fingerprint(key), keyHash, vault.encrypt(key, order.order_id)]);
   return result.rowCount ? key : null;
 }
+
+require('./customer-api')({ app, pool, auth, bcrypt, vault, fingerprint, createLicenseKey, mercadoPago, provisionLicense });
 
 app.get('/health', async (_req, res) => {
   try { await pool.query('SELECT 1'); res.json({ ok: true, service: 'vortex-api' }); }
@@ -84,19 +87,19 @@ app.get('/health', async (_req, res) => {
 app.post('/api/auth/register', async (req, res) => {
   try {
     const { name, email, password } = req.body || {};
-    if (!name || !email || !password || password.length < 8) return res.status(400).json({ error: 'Nome, e-mail e senha de 8 caracteres sÃ£o obrigatÃ³rios.' });
+    if (!name || !email || !password || password.length < 8) return res.status(400).json({ error: 'Nome, e-mail e senha de 8 caracteres são obrigatórios.' });
     const hash = await bcrypt.hash(password, 12);
     const { rows } = await pool.query('INSERT INTO users (name, email, password_hash) VALUES ($1, LOWER($2), $3) RETURNING id, name, email, role', [name.trim(), email.trim(), hash]);
     res.status(201).json({ user: rows[0], token: issueToken(rows[0]) });
   } catch (error) {
-    res.status(error.code === '23505' ? 409 : 500).json({ error: error.code === '23505' ? 'E-mail jÃ¡ cadastrado.' : 'NÃ£o foi possÃ­vel criar a conta.' });
+    res.status(error.code === '23505' ? 409 : 500).json({ error: error.code === '23505' ? 'E-mail já cadastrado.' : 'Não foi possível criar a conta.' });
   }
 });
 
 app.post('/api/auth/login', async (req, res) => {
   const { email, password } = req.body || {};
   const { rows } = await pool.query('SELECT id, name, email, role, password_hash FROM users WHERE email = LOWER($1)', [email || '']);
-  if (!rows[0] || !(await bcrypt.compare(password || '', rows[0].password_hash))) return res.status(401).json({ error: 'E-mail ou senha invÃ¡lidos.' });
+  if (!rows[0] || !(await bcrypt.compare(password || '', rows[0].password_hash))) return res.status(401).json({ error: 'E-mail ou senha inválidos.' });
   const user = rows[0]; delete user.password_hash;
   res.json({ user, token: issueToken(user) });
 });
@@ -104,7 +107,7 @@ app.post('/api/auth/login', async (req, res) => {
 app.post('/api/checkout', auth, async (req, res) => {
   const { product: slug } = req.body || {};
   const product = products.get(slug);
-  if (!product || product.price === 0) return res.status(400).json({ error: 'Produto invÃ¡lido ou sem preÃ§o definido.' });
+  if (!product || product.price === 0) return res.status(400).json({ error: 'Produto inválido ou sem preço definido.' });
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -118,65 +121,22 @@ app.post('/api/checkout', auth, async (req, res) => {
     await client.query('UPDATE orders SET mercado_pago_id = $1 WHERE id = $2', [preference.id, order.id]);
     await client.query('COMMIT');
     res.status(201).json({ checkout_url: preference.init_point, order_id: order.id });
-  } catch (error) { await client.query('ROLLBACK'); res.status(500).json({ error: 'NÃ£o foi possÃ­vel criar o checkout.' }); }
+  } catch (error) { await client.query('ROLLBACK'); res.status(500).json({ error: 'Não foi possível criar o checkout.' }); }
   finally { client.release(); }
 });
 
-app.post('/api/mercadopago/webhook', async (req, res) => {
-  res.sendStatus(200);
-  try {
-    const paymentId = req.body?.data?.id || req.query['data.id'];
-    if (!paymentId) return;
-    const payment = await mercadoPago(`/v1/payments/${encodeURIComponent(paymentId)}`);
-    if (payment.status !== 'approved') return;
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
-      const order = (await client.query(`SELECT o.id AS order_id, o.user_id, o.product_id, p.slug AS product_slug FROM orders o JOIN products p ON p.id=o.product_id WHERE o.id=$1 FOR UPDATE`, [payment.external_reference])).rows[0];
-      if (!order) throw new Error('Pedido não encontrado.');
-      await client.query('UPDATE orders SET status = \'approved\' WHERE id = $1', [order.order_id]);
-      const key = await provisionLicense(client, order);
-      await client.query('COMMIT');
-      if (key) console.log(`LicenÃ§a criada para o pedido ${order.order_id}: ${key}`);
-    } catch (error) { await client.query('ROLLBACK'); console.error(error); }
-    finally { client.release(); }
-  } catch (error) { console.error('Webhook Mercado Pago:', error.message); }
-});
-
-app.get('/api/me/licenses', auth, async (req, res) => {
-  const { rows } = await pool.query(`SELECT l.id, l.status, p.name AS product, l.created_at, COALESCE(json_agg(ai.ip_address) FILTER (WHERE ai.id IS NOT NULL), '[]') AS authorized_ips FROM licenses l JOIN products p ON p.id=l.product_id LEFT JOIN authorized_ips ai ON ai.license_id=l.id WHERE l.user_id=$1 GROUP BY l.id, p.name ORDER BY l.created_at DESC`, [req.user.sub]);
-  res.json(rows);
-});
-
-app.post('/api/licenses/:id/ip', auth, async (req, res) => {
-  const { ip, label } = req.body || {};
-  if (!ip) return res.status(400).json({ error: 'IP obrigatÃ³rio.' });
-  const result = await pool.query(`INSERT INTO authorized_ips (license_id, ip_address, label) SELECT id, $1::inet, $2 FROM licenses WHERE id=$3 AND user_id=$4 AND status='active' ON CONFLICT DO NOTHING RETURNING id, ip_address, label`, [ip.trim(), label || null, req.params.id, req.user.sub]);
-  if (!result.rowCount) return res.status(404).json({ error: 'LicenÃ§a nÃ£o encontrada ou IP jÃ¡ autorizado.' });
-  res.status(201).json(result.rows[0]);
-});
-
-app.post('/api/license/verify', async (req, res) => {
-  const { key, product, ip } = req.body || {};
-  if (!key || !product || !ip) return res.status(400).json({ valid: false, ip_authorized: false });
-  const result = await pool.query(`SELECT l.id, l.license_key_hash, l.status, p.slug FROM licenses l JOIN products p ON p.id=l.product_id WHERE l.license_key_fingerprint=$1 AND p.slug=$2`, [fingerprint(key.trim()), product.trim()]);
-  const license = result.rows[0];
-  if (!license || license.status !== 'active' || !(await bcrypt.compare(key.trim(), license.license_key_hash))) return res.status(403).json({ valid: false, ip_authorized: false });
-  const authorized = await pool.query('SELECT id FROM authorized_ips WHERE license_id=$1 AND ip_address=$2::inet', [license.id, ip.trim()]);
-  if (!authorized.rowCount) return res.status(403).json({ valid: true, ip_authorized: false });
-  await pool.query('UPDATE authorized_ips SET last_seen_at=NOW() WHERE id=$1', [authorized.rows[0].id]);
-  res.json({ valid: true, ip_authorized: true });
-});
 
 async function start() {
   requiredEnv();
   const schemaPath = path.join(__dirname, 'schema.sql');
   const schema = fs.readFileSync(schemaPath, 'utf8');
   await pool.query(schema);
+  await pool.query('ALTER TABLE licenses ADD COLUMN IF NOT EXISTS key_encrypted TEXT');
+  await pool.query('ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_id TEXT UNIQUE');
   app.listen(port, '0.0.0.0', () => console.log(`Vortex API ouvindo na porta ${port}`));
 }
 
 start().catch(error => {
-  console.error('NÃ£o foi possÃ­vel iniciar a API ou preparar o banco:', error);
+  console.error('Não foi possível iniciar a API ou preparar o banco:', error);
   process.exit(1);
 });

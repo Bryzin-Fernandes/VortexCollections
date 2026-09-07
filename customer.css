@@ -1,0 +1,25 @@
+[hidden]{display:none!important}
+#customer-panel{max-width:1180px;margin:auto;padding:50px 28px 90px;color:#fff8f6;font-size:16px;line-height:1.6}
+#customer-panel h1{font:700 64px/1.1 'Barlow Condensed',sans-serif;margin:10px 0}
+#customer-panel h2{font-size:26px;margin:30px 0 18px}
+#customer-panel h3{font:700 36px/1.15 'Barlow Condensed',sans-serif;margin:15px 0}
+#customer-panel h4{font-size:18px;margin:24px 0 10px}
+.customer-head{display:flex;justify-content:space-between;align-items:center;gap:20px;border-bottom:1px solid #493035;padding-bottom:24px}
+.customer-actions{display:flex;flex-wrap:wrap;gap:10px}
+#customer-panel .btn{font-size:14px;line-height:1.4;min-height:44px;margin:8px 0}
+#customer-panel .btn:disabled{opacity:.5;cursor:not-allowed;transform:none}
+.customer-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:22px}
+.customer-card{min-width:0;background:linear-gradient(130deg,#291317,#140d0f);border:1px solid #5b2831;border-radius:10px;padding:28px}
+.customer-card p,.customer-reconcile p{color:#d1bfc3}
+.customer-status{font-size:14px;color:#ffb3b3}
+#customer-panel label{display:block;font-size:14px}
+#customer-panel input{display:block;box-sizing:border-box;width:100%;padding:13px;background:#0e090b;color:white;border:1px solid #79515a;border-radius:5px;font-size:16px;margin:8px 0}
+#customer-panel input:focus,#customer-panel button:focus-visible{outline:2px solid #ff6c72;outline-offset:3px}
+#customer-panel ul{padding:0;list-style:none}
+#customer-panel li{display:flex;justify-content:space-between;align-items:center;gap:10px;overflow-wrap:anywhere;border-bottom:1px solid #493035;padding:6px 0}
+#customer-panel small{display:block;color:#d1bfc3;font-size:14px}
+#customer-message{border-left:3px solid #ef3b3b;padding:8px 14px;color:#ffd3d3}
+.customer-order{display:flex;flex-wrap:wrap;justify-content:space-between;gap:16px;border-bottom:1px solid #493035;padding:18px 0}
+.customer-reconcile{margin-top:30px;padding:22px;border:1px solid #493035;border-radius:8px}
+.customer-reconcile summary{cursor:pointer;font-weight:600}
+@media(max-width:760px){.customer-grid{grid-template-columns:1fr}.customer-head{align-items:flex-start;flex-direction:column}#customer-panel{padding:30px 18px}.customer-card{padding:20px}}

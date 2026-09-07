@@ -104,6 +104,14 @@ function install({ app, pool, auth, bcrypt, vault, fingerprint, createLicenseKey
     const { key, product } = req.body || {};
     // Não confia no IP declarado pelo plugin: usa o IP de origem observado pelo proxy confiável.
     const observed = (req.ip || '').replace(/^::ffff:/, '');
+    const originalJson = res.json.bind(res);
+
+res.json = function (body) {
+  return originalJson({
+    ...body,
+    server_ip: observed
+  });
+};
     if (typeof key !== 'string' || key.length > 160 || typeof product !== 'string' || !net.isIP(observed))
       return res.status(400).json({ valid: false, ip_authorized: false });
     const license = (await pool.query(`SELECT l.id,l.license_key_hash FROM licenses l JOIN products p ON p.id=l.product_id

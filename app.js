@@ -1,0 +1,13 @@
+const $ = (selector) => document.querySelector(selector);
+const openModal = (id) => { const modal = $(id); modal.classList.add('open'); modal.setAttribute('aria-hidden','false'); };
+const closeModals = () => document.querySelectorAll('.modal.open').forEach(m => {m.classList.remove('open');m.setAttribute('aria-hidden','true')});
+document.querySelectorAll('[data-modal]').forEach(btn => btn.addEventListener('click', () => openModal('#'+btn.dataset.modal+'-modal')));
+document.querySelectorAll('[data-close]').forEach(btn => btn.addEventListener('click', closeModals));
+document.querySelectorAll('.modal').forEach(m => m.addEventListener('click', e => {if(e.target===m) closeModals()}));
+document.addEventListener('keydown', e => {if(e.key==='Escape') closeModals()});
+const prices = { VortexKitPvP:'R$ 125', VortexFeast:'R$ 20', VortexThePIT:'R$ 125', VortexSkyWars:'Consulte' };
+let selectedProduct = '';
+document.querySelectorAll('[data-buy]').forEach(btn => btn.addEventListener('click', () => { selectedProduct=btn.dataset.buy; $('#buy-title').textContent=selectedProduct==='VortexSkyWars'?'Interesse no '+selectedProduct:'Comprar '+selectedProduct; $('#buy-price').textContent=prices[selectedProduct]; $('#checkout-btn').textContent=selectedProduct==='VortexSkyWars'?'Falar com a Vortex →':'Continuar para pagamento →'; openModal('#buy-modal'); }));
+$('#checkout-btn').addEventListener('click', () => { if(selectedProduct==='VortexSkyWars'){ window.open('https://wa.me/5534998170791?text=Tenho%20interesse%20no%20VortexSkyWars','_blank'); return; } alert('Checkout Mercado Pago: conecte este botão ao endpoint seguro do backend.'); });
+$('#login-form').addEventListener('submit', e => {e.preventDefault(); alert('Login de demonstração. A autenticação real será ligada ao backend MySQL.');});
+$('#register-form').addEventListener('submit', e => {e.preventDefault(); alert('Cadastro de demonstração. No backend, a senha será protegida com hash e a licença será vinculada ao e-mail.');});

@@ -1,0 +1,13 @@
+CREATE DATABASE IF NOT EXISTS vortex_collections CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+USE vortex_collections;
+
+CREATE TABLE users (id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, name VARCHAR(120) NOT NULL, email VARCHAR(190) NOT NULL UNIQUE, password_hash VARCHAR(255) NOT NULL, role ENUM('customer','admin') NOT NULL DEFAULT 'customer', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE products (id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, slug VARCHAR(80) NOT NULL UNIQUE, name VARCHAR(120) NOT NULL, price_cents INT UNSIGNED NOT NULL, download_url VARCHAR(500), active BOOLEAN DEFAULT TRUE, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE orders (id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, user_id BIGINT UNSIGNED NOT NULL, product_id BIGINT UNSIGNED NOT NULL, mercado_pago_id VARCHAR(120) UNIQUE, status ENUM('pending','approved','rejected','cancelled') NOT NULL DEFAULT 'pending', amount_cents INT UNSIGNED NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (user_id) REFERENCES users(id), FOREIGN KEY (product_id) REFERENCES products(id));
+CREATE TABLE licenses (id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, order_id BIGINT UNSIGNED NOT NULL UNIQUE, user_id BIGINT UNSIGNED NOT NULL, product_id BIGINT UNSIGNED NOT NULL, license_key VARCHAR(80) NOT NULL UNIQUE, license_key_hash VARCHAR(255) NOT NULL, status ENUM('active','suspended','revoked') DEFAULT 'active', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (order_id) REFERENCES orders(id), FOREIGN KEY (user_id) REFERENCES users(id), FOREIGN KEY (product_id) REFERENCES products(id));
+CREATE TABLE authorized_ips (id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, license_id BIGINT UNSIGNED NOT NULL, ip_address VARCHAR(45) NOT NULL, label VARCHAR(120), last_seen_at TIMESTAMP NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, UNIQUE KEY unique_license_ip (license_id, ip_address), FOREIGN KEY (license_id) REFERENCES licenses(id) ON DELETE CASCADE);
+CREATE TABLE downloads (id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, user_id BIGINT UNSIGNED NOT NULL, product_id BIGINT UNSIGNED NOT NULL, ip_address VARCHAR(45), downloaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (user_id) REFERENCES users(id), FOREIGN KEY (product_id) REFERENCES products(id));
+INSERT INTO products (slug,name,price_cents) VALUES ('vortex-kitpvp','VortexKitPvP',12500),('vortex-feast','VortexFeast',2000),('vortex-thepit','VortexThePIT',12500),('vortex-skywars','VortexSkyWars',0);
+
+-- No webhook de pagamento aprovado, o backend deve gerar uma chave criptograficamente segura,
+-- salvar o hash e entregar a chave ao cliente na área autenticada.

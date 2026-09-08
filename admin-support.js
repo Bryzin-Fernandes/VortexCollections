@@ -100,8 +100,20 @@ function install({ app, pool, auth, mercadoPago, createLicenseKey, bcrypt, vault
   }));
   app.get('/api/admin/licenses', ...admin, wrap(async (_req, res) => res.json((await pool.query('SELECT l.id,l.status,l.created_at,u.id user_id,u.name,u.email,p.name product FROM licenses l JOIN users u ON u.id=l.user_id JOIN products p ON p.id=l.product_id ORDER BY l.id DESC LIMIT 200')).rows)));
   app.post('/api/admin/licenses', ...admin, wrap(async (req, res) => {
-    const { user_id, product } = req.body || {}; const row = (await pool.query('SELECT u.id user_id,p.id product_id,p.slug FROM users u JOIN products p ON p.slug=$2 WHERE u.id=$1 AND p.active=TRUE', [user_id, product])).rows[0]; if (!row) return res.status(400).json({ error: 'Cliente ou produto inválido.' });
-    const order=(await pool.query("INSERT INTO orders (user_id,product_id,amount_cents,status) SELECT $1,id,price_cents,'approved' FROM products WHERE id=$2 RETURNING id,product_id,user_id",[row.user_id,row.product_id])).rows[0]; const key=createLicenseKey(row.slug); await pool.query('INSERT INTO licenses (order_id,user_id,product_id,license_key_fingerprint,license_key_hash,key_encrypted) VALUES ($1,$2,$3,$4,$5,$6)',[order.id,row.user_id,row.product_id,fingerprint(key),await bcrypt.hash(key,12),vault.encrypt(key,order.id)]); res.status(201).json({ ok:true });
+    const userId = String(req.body?.user_id || ''), slug = String(req.body?.product || '').trim();
+    if (!/^\d+$/.test(userId) || !/^[a-z0-9-]{2,80}$/.test(slug)) return res.status(400).json({ error: 'Informe um ID de cliente e um produto válidos.' });
+    const user = (await pool.query('SELECT id FROM users WHERE id=$1', [userId])).rows[0];
+    const product = (await pool.query('SELECT id,slug,price_cents FROM products WHERE slug=$1 AND active=TRUE', [slug])).rows[0];
+    if (!user) return res.status(404).json({ error: 'Cliente não encontrado.' });
+    if (!product) return res.status(404).json({ error: 'Produto não encontrado ou inativo.' });
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const order = (await client.query("INSERT INTO orders (user_id,product_id,amount_cents,original_amount_cents,status) VALUES ($1,$2,$3,$3,'approved') RETURNING id", [user.id, product.id, product.price_cents])).rows[0];
+      const key = createLicenseKey(product.slug);
+      const license = (await client.query("INSERT INTO licenses (order_id,user_id,product_id,license_key_fingerprint,license_key_hash,key_encrypted,source,status) VALUES ($1,$2,$3,$4,$5,$6,'admin','active') RETURNING id", [order.id, user.id, product.id, fingerprint(key), await bcrypt.hash(key, 12), vault.encrypt(key, order.id)])).rows[0];
+      await client.query('COMMIT'); res.status(201).json({ ok: true, license_id: license.id });
+    } catch (error) { await client.query('ROLLBACK'); throw error; } finally { client.release(); }
   }));
   app.post('/api/admin/licenses/:id/revoke', ...admin, wrap(async (req, res) => { await pool.query("UPDATE licenses SET status='revoked' WHERE id=$1", [req.params.id]); res.json({ok:true}); }));
   app.delete('/api/admin/licenses/:id', ...admin, wrap(async (req, res) => { if (!/^\d+$/.test(req.params.id)) return res.status(400).json({ error: 'Licença inválida.' }); const client = await pool.connect(); try { await client.query('BEGIN'); const row = (await client.query('SELECT order_id FROM licenses WHERE id=$1 FOR UPDATE', [req.params.id])).rows[0]; if (!row) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Licença não encontrada.' }); } await client.query('DELETE FROM authorized_ips WHERE license_id=$1', [req.params.id]); await client.query('DELETE FROM licenses WHERE id=$1', [req.params.id]); await client.query('DELETE FROM orders WHERE id=$1', [row.order_id]); await client.query('COMMIT'); res.json({ ok: true }); } catch (error) { await client.query('ROLLBACK'); throw error; } finally { client.release(); } }));

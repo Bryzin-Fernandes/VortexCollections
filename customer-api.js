@@ -29,7 +29,7 @@ function install({ app, pool, auth, bcrypt, vault, fingerprint, createLicenseKey
     WHERE l.id=$1 AND l.user_id=$2 AND l.status='active' AND o.status='approved'
   `, [id, user])).rows[0];
   app.get('/api/me', auth, wrap(async (req, res) => {
-    const user = (await pool.query('SELECT id,name,email FROM users WHERE id=$1', [req.user.sub])).rows[0];
+    const user = (await pool.query('SELECT id,name,email,role FROM users WHERE id=$1', [req.user.sub])).rows[0];
     if (!user) return res.status(401).json({ error: 'Conta não encontrada.' });
     res.json(user);
   }));

@@ -2,7 +2,7 @@ const ADMIN_API='https://vortexcollections-api.onrender.com';
 const token=localStorage.getItem('vortex_token');
 const $=s=>document.querySelector(s);
 const make=(tag,text,className)=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(className)n.className=className;return n};
-const req=async(p,o={})=>{const r=await fetch(ADMIN_API+p,{...o,headers:{'Content-Type':'application/json',Authorization:'Bearer '+token,...o.headers}}),d=await r.json().catch(()=>({}));if(!r.ok)throw Error(d.error||'Operação não permitida.');return d};
+const req=async(p,o={})=>{const r=await fetch(ADMIN_API+p,{...o,headers:{'Content-Type':'application/json',Authorization:'Bearer '+token,...o.headers}}),d=await r.json().catch(()=>({}));if(!r.ok){const e=Error(d.error||('API respondeu HTTP '+r.status+'. Confirme se a API v6 foi publicada.'));e.status=r.status;throw e}return d};
 const msg=t=>$('.portal-message').textContent=t;
 function tableRow(title,meta,actions=[]){const row=make('article',undefined,'admin-row');const info=make('div');info.append(make('strong',title),make('small',meta));const buttons=make('div','', 'admin-row-actions');actions.forEach(a=>buttons.append(a));row.append(info,buttons);return row}
 function button(text,callback,kind='btn-outline'){const b=make('button',text,'btn '+kind);b.type='button';b.addEventListener('click',callback);return b}

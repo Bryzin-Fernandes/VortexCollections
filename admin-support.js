@@ -1,138 +1,37 @@
-const crypto = require('crypto');
-
-function install({ app, pool, auth, mercadoPago, createLicenseKey, bcrypt, vault, fingerprint }) {
-  const wrap = fn => (req, res, next) => Promise.resolve().then(() => fn(req, res, next)).catch(error => {
-    console.error('Admin/suporte:', error.code || error.name);
-    if (!res.headersSent) res.status(500).json({ error: 'Não foi possível concluir a operação.' });
-  });
-  const admin = [auth, wrap(async (req, res, next) => {
-    if (req.user.role !== 'admin' || !process.env.ADMIN_USER_ID || String(req.user.sub) !== String(process.env.ADMIN_USER_ID)) return res.status(403).json({ error: 'Acesso restrito ao administrador principal.' });
-    next();
-  })];
-  const staff = [auth, wrap(async (req, res, next) => {
-    if (req.user.role === 'admin' && process.env.ADMIN_USER_ID && String(req.user.sub) === String(process.env.ADMIN_USER_ID)) return next();
-    const row = (await pool.query('SELECT 1 FROM support_agents WHERE user_id=$1 AND active=TRUE', [req.user.sub])).rows[0];
-    if (!row) return res.status(403).json({ error: 'Acesso restrito à equipe de suporte.' });
-    next();
-  })];
-  const activePlan = async user => (await pool.query(`SELECT s.*,p.slug,p.name,p.features FROM subscriptions s JOIN subscription_plans p ON p.id=s.plan_id WHERE s.user_id=$1 AND s.status='active' AND s.current_period_end>NOW() ORDER BY s.current_period_end DESC LIMIT 1`, [user])).rows[0];
-  const entitlements = slug => slug === 'beta' ? ['vortex-kitpvp', 'vortex-feast'] : ['vortex-kitpvp', 'vortex-feast', 'vortex-thepit', 'vortex-skywars'];
-  async function activateSubscription(sub, plan) {
-    for (const slug of entitlements(plan.slug)) {
-      const product = (await pool.query('SELECT id,slug FROM products WHERE slug=$1 AND active=TRUE', [slug])).rows[0];
-      if (!product) continue;
-      const exists = (await pool.query("SELECT id FROM licenses WHERE subscription_id=$1 AND product_id=$2 AND status='active'", [sub.id, product.id])).rows[0];
-      if (exists) continue;
-      const order = (await pool.query("INSERT INTO orders (user_id,product_id,amount_cents,status) VALUES ($1,$2,0,'approved') RETURNING id", [sub.user_id, product.id])).rows[0];
-      const key = createLicenseKey(product.slug);
-      await pool.query("INSERT INTO licenses (order_id,user_id,product_id,license_key_fingerprint,license_key_hash,key_encrypted,source,subscription_id) VALUES ($1,$2,$3,$4,$5,$6,'subscription',$7)", [order.id, sub.user_id, product.id, fingerprint(key), await bcrypt.hash(key, 12), vault.encrypt(key, order.id), sub.id]);
-    }
+(() => {
+  const API = 'https://vortexcollections-api.onrender.com';
+  const token = localStorage.getItem('vortex_token');
+  const main = document.querySelector('main');
+  if (!main || !token) return;
+  const polish = document.createElement('link'); polish.rel = 'stylesheet'; polish.href = 'chat-polish.css'; document.head.append(polish);
+  const style = document.createElement('style'); style.textContent = '.admin-support{margin-top:22px}.admin-support-head{display:flex;justify-content:space-between;align-items:flex-start;gap:18px}.admin-support-grid{display:grid;grid-template-columns:minmax(220px,.75fr) minmax(0,1.25fr);gap:18px;margin-top:20px}.ticket-select{display:flex;flex-direction:column;align-items:flex-start;gap:5px;text-align:left;width:100%;padding:15px;border:1px solid #75cbff2b;border-radius:10px;background:#0b1726;color:#fff;cursor:pointer}.ticket-select:hover,.ticket-select:focus-visible{border-color:#8ee5b9;background:#12243a;outline:none}.ticket-select small,.support-thread-meta{color:#9db2c8}.support-thread{min-height:230px;max-height:420px;overflow:auto;padding:16px;border:1px solid #75cbff2b;border-radius:12px;background:linear-gradient(180deg,#091320,#0d1d2d)}.support-empty{color:#9db2c8!important;text-align:center;padding:36px 12px}.support-thread-title{margin:0 0 4px!important}.support-thread-meta{display:block;margin-bottom:14px}.chat-message{max-width:84%;margin:10px 0;padding:12px 14px;border-radius:14px;background:#172d45;border:1px solid #75cbff2b}.chat-message.from-customer{margin-right:auto;border-bottom-left-radius:4px}.chat-message.from-staff{margin-left:auto;background:linear-gradient(135deg,#14543f,#1b7255);border-color:#8ee5b955;border-bottom-right-radius:4px}.chat-message strong{display:block;font-size:12px;color:#c9e9ff}.chat-message p{margin:5px 0;color:#fff;white-space:pre-wrap}.chat-message small{display:block;color:#b8cadb;font-size:10px}.support-reply{display:flex;gap:10px;margin-top:14px}.support-reply textarea{flex:1;min-height:70px;resize:vertical;padding:12px;background:#091320;color:#fff;border:1px solid #56758e;border-radius:7px;font:inherit}.support-reply .btn{align-self:flex-end}@media(max-width:720px){.admin-support-grid{grid-template-columns:1fr}.support-reply{flex-direction:column}.support-reply .btn{align-self:stretch}.admin-support-head{flex-direction:column}}'; document.head.append(style);
+  const request = async (path, options = {}) => {
+    const response = await fetch(API + path, { ...options, headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token, ...(options.headers || {}) } });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || 'Não foi possível carregar o suporte.');
+    return data;
+  };
+  const make = (tag, text, className) => { const node = document.createElement(tag); if (text !== undefined) node.textContent = text; if (className) node.className = className; return node; };
+  const section = make('section', undefined, 'portal-card admin-support'); section.dataset.adminPanel = 'support';
+  section.innerHTML = '<div class="admin-support-head"><div><span class="section-kicker">CENTRAL DE ATENDIMENTO</span><h2>Chamados dos clientes</h2><p>Administradores e usuários da equipe de suporte podem abrir a conversa e responder por aqui.</p></div><button id="admin-support-refresh" class="btn btn-outline" type="button">Atualizar</button></div><div class="admin-support-grid"><div id="admin-ticket-list" class="portal-list"></div><div id="admin-ticket-thread" class="support-thread"><p class="support-empty">Selecione um chamado para visualizar a conversa.</p></div></div><form id="admin-ticket-reply" class="support-reply" hidden><textarea name="body" required maxlength="5000" placeholder="Digite uma resposta para o cliente..."></textarea><button class="btn btn-primary">Responder ao cliente</button></form>';
+  const slot = document.querySelector('#admin-support-slot'); if (slot) slot.replaceWith(section); else main.insertBefore(section, main.querySelector('.portal-message') || null);
+  const list = section.querySelector('#admin-ticket-list'), thread = section.querySelector('#admin-ticket-thread'), reply = section.querySelector('#admin-ticket-reply');
+  let selected = null;
+  function renderThread(data) {
+    thread.replaceChildren();
+    thread.append(make('h3', data.ticket.subject, 'support-thread-title'), make('small', 'Cliente: ' + (data.ticket.customer_name || data.ticket.email), 'support-thread-meta'));
+    data.messages.forEach(message => { const bubble = make('article', undefined, 'chat-message ' + (message.author_id === data.ticket.user_id ? 'from-customer' : 'from-staff')); bubble.append(make('strong', message.author_name), make('p', message.body), make('small', new Date(message.created_at).toLocaleString('pt-BR'))); thread.append(bubble); });
+    reply.hidden = false;
   }
-
-  app.get('/api/plans', wrap(async (_req, res) => res.json((await pool.query('SELECT slug,name,price_cents,features FROM subscription_plans WHERE active=TRUE ORDER BY price_cents')).rows)));
-  app.get('/api/me/subscription', auth, wrap(async (req, res) => res.json((await activePlan(req.user.sub)) || null)));
-  app.post('/api/plans/:slug/subscribe', auth, wrap(async (req, res) => {
-    const plan = (await pool.query('SELECT * FROM subscription_plans WHERE slug=$1 AND active=TRUE', [req.params.slug])).rows[0];
-    const user = (await pool.query('SELECT id,email FROM users WHERE id=$1', [req.user.sub])).rows[0];
-    if (!plan || !user || Number(plan.price_cents) <= 0) return res.status(400).json({ error: 'Plano ainda não configurado para assinatura.' });
-    if (await activePlan(req.user.sub)) return res.status(409).json({ error: 'Você já possui uma assinatura ativa.' });
-    const subscription = (await pool.query('INSERT INTO subscriptions (user_id,plan_id,status,current_period_end) VALUES ($1,$2,\'pending\',NOW()) RETURNING id', [user.id, plan.id])).rows[0];
+  async function openTicket(id) { selected = id; try { renderThread(await request('/api/support/tickets/' + id)); } catch (error) { thread.replaceChildren(make('p', error.message, 'support-empty')); } }
+  async function load() {
     try {
-      const mp = await mercadoPago('/preapproval', { method: 'POST', body: JSON.stringify({ reason: plan.name, payer_email: user.email, external_reference: `subscription:${subscription.id}`, auto_recurring: { frequency: 1, frequency_type: 'months', transaction_amount: Number(plan.price_cents) / 100, currency_id: 'BRL' }, back_url: `${process.env.PUBLIC_URL}/#cliente`, status: 'pending' }) });
-      await pool.query('UPDATE subscriptions SET mercado_pago_id=$1 WHERE id=$2', [mp.id, subscription.id]);
-      res.status(201).json({ checkout_url: mp.init_point || mp.sandbox_init_point, subscription_id: subscription.id });
-    } catch (error) { await pool.query("UPDATE subscriptions SET status='cancelled' WHERE id=$1", [subscription.id]); throw error; }
-  }));
-  app.post('/api/coupons/validate', auth, wrap(async (req, res) => {
-    const code = String(req.body.code || '').trim().toUpperCase();
-    const row = (await pool.query("SELECT code,discount_type,discount_value FROM coupons WHERE code=$1 AND active=TRUE AND (expires_at IS NULL OR expires_at>NOW()) AND (max_uses IS NULL OR used_count<max_uses)", [code])).rows[0];
-    if (!row) return res.status(404).json({ error: 'Cupom inválido, expirado ou esgotado.' });
-    res.json(row);
-  }));
-
-  app.get('/api/support/tickets', auth, wrap(async (req, res) => {
-    const isStaff = req.user.role === 'admin' && process.env.ADMIN_USER_ID && String(req.user.sub) === String(process.env.ADMIN_USER_ID) || (await pool.query('SELECT 1 FROM support_agents WHERE user_id=$1 AND active=TRUE', [req.user.sub])).rowCount;
-    const query = isStaff ? 'SELECT t.*,u.name AS customer_name,u.email FROM support_tickets t JOIN users u ON u.id=t.user_id ORDER BY t.updated_at DESC' : 'SELECT t.*,u.name AS customer_name,u.email FROM support_tickets t JOIN users u ON u.id=t.user_id WHERE t.user_id=$1 ORDER BY t.updated_at DESC';
-    res.json((await pool.query(query, isStaff ? [] : [req.user.sub])).rows);
-  }));
-  app.get('/api/support/tickets/:id', auth, wrap(async (req, res) => {
-    const ticket = (await pool.query('SELECT t.*,u.name AS customer_name,u.email FROM support_tickets t JOIN users u ON u.id=t.user_id WHERE t.id=$1', [req.params.id])).rows[0];
-    if (!ticket) return res.sendStatus(404);
-    const isStaff = req.user.role === 'admin' && process.env.ADMIN_USER_ID && String(req.user.sub) === String(process.env.ADMIN_USER_ID) || (await pool.query('SELECT 1 FROM support_agents WHERE user_id=$1 AND active=TRUE', [req.user.sub])).rowCount;
-    if (!isStaff && String(ticket.user_id) !== String(req.user.sub)) return res.sendStatus(404);
-    res.json({ ticket, messages: (await pool.query('SELECT m.*,u.name AS author_name FROM support_messages m JOIN users u ON u.id=m.author_id WHERE m.ticket_id=$1 ORDER BY m.created_at', [req.params.id])).rows });
-  }));
-  app.post('/api/support/tickets', auth, wrap(async (req, res) => {
-    const subject = String(req.body.subject || '').trim().slice(0,150), message = String(req.body.message || '').trim().slice(0,5000);
-    if (!subject || !message) return res.status(400).json({ error: 'Informe o assunto e a mensagem.' });
-    const ticket = (await pool.query('INSERT INTO support_tickets (user_id,subject,status) VALUES ($1,$2,\'open\') RETURNING id', [req.user.sub, subject])).rows[0];
-    await pool.query('INSERT INTO support_messages (ticket_id,author_id,body) VALUES ($1,$2,$3)', [ticket.id, req.user.sub, message]);
-    res.status(201).json(ticket);
-  }));
-  app.post('/api/support/tickets/:id/messages', auth, wrap(async (req, res) => {
-    const ticket = (await pool.query('SELECT * FROM support_tickets WHERE id=$1', [req.params.id])).rows[0];
-    if (!ticket) return res.sendStatus(404);
-    const isStaff = req.user.role === 'admin' && process.env.ADMIN_USER_ID && String(req.user.sub) === String(process.env.ADMIN_USER_ID) || (await pool.query('SELECT 1 FROM support_agents WHERE user_id=$1 AND active=TRUE', [req.user.sub])).rowCount;
-    if (!isStaff && String(ticket.user_id) !== String(req.user.sub)) return res.sendStatus(404);
-    const body = String(req.body.body || '').trim().slice(0,5000); if (!body) return res.status(400).json({ error: 'Mensagem vazia.' });
-    await pool.query('INSERT INTO support_messages (ticket_id,author_id,body) VALUES ($1,$2,$3)', [ticket.id, req.user.sub, body]);
-    await pool.query("UPDATE support_tickets SET status=$1,updated_at=NOW() WHERE id=$2", [isStaff ? 'waiting_customer' : 'open', ticket.id]);
-    res.status(201).json({ ok: true });
-  }));
-  app.post('/api/support/tickets/:id/close', auth, wrap(async (req, res) => { const t=(await pool.query('SELECT user_id FROM support_tickets WHERE id=$1',[req.params.id])).rows[0]; if(!t||String(t.user_id)!==String(req.user.sub)) return res.sendStatus(404); await pool.query("UPDATE support_tickets SET status='closed',updated_at=NOW() WHERE id=$1",[req.params.id]); res.json({ok:true}); }));
-
-  app.get('/api/admin/overview', ...admin, wrap(async (_req, res) => res.json({ users: (await pool.query('SELECT COUNT(*)::int count FROM users')).rows[0].count, licenses: (await pool.query("SELECT COUNT(*)::int count FROM licenses WHERE status='active'")).rows[0].count, tickets: (await pool.query("SELECT COUNT(*)::int count FROM support_tickets WHERE status<>'closed'")).rows[0].count, coupons: (await pool.query('SELECT COUNT(*)::int count FROM coupons WHERE active=TRUE')).rows[0].count })));
-  app.get('/api/admin/users', ...admin, wrap(async (_req, res) => res.json((await pool.query("SELECT u.id,u.name,u.email,u.role,u.created_at,COUNT(DISTINCT l.id)::int AS licenses FROM users u LEFT JOIN licenses l ON l.user_id=u.id GROUP BY u.id ORDER BY u.id DESC LIMIT 500")).rows)));
-  app.patch('/api/admin/users/:id', ...admin, wrap(async (req, res) => {
-    if (!/^\d+$/.test(req.params.id)) return res.status(400).json({ error: 'ID de usuário inválido.' });
-    const name = String(req.body?.name || '').trim().slice(0, 120), email = String(req.body?.email || '').trim().toLowerCase().slice(0, 190), role = req.body?.role === 'admin' ? 'admin' : 'customer';
-    if (!name || !/^\S+@\S+\.\S+$/.test(email)) return res.status(400).json({ error: 'Nome e e-mail válidos são obrigatórios.' });
-    if (String(req.params.id) === String(process.env.ADMIN_USER_ID) && role !== 'admin') return res.status(400).json({ error: 'O administrador principal não pode perder a permissão admin.' });
-    try { const row = (await pool.query('UPDATE users SET name=$1,email=$2,role=$3 WHERE id=$4 RETURNING id,name,email,role', [name, email, role, req.params.id])).rows[0]; if (!row) return res.status(404).json({ error: 'Usuário não encontrado.' }); res.json(row); }
-    catch (error) { if (error.code === '23505') return res.status(409).json({ error: 'Este e-mail já está cadastrado.' }); throw error; }
-  }));
-  app.delete('/api/admin/users/:id', ...admin, wrap(async (req, res) => {
-    if (!/^\d+$/.test(req.params.id)) return res.status(400).json({ error: 'ID de usuário inválido.' });
-    if (String(req.params.id) === String(process.env.ADMIN_USER_ID)) return res.status(400).json({ error: 'O administrador principal não pode ser removido.' });
-    const client = await pool.connect();
-    try { await client.query('BEGIN'); await client.query('DELETE FROM support_messages WHERE author_id=$1', [req.params.id]); await client.query('DELETE FROM support_tickets WHERE user_id=$1', [req.params.id]); await client.query('DELETE FROM support_agents WHERE user_id=$1', [req.params.id]); await client.query('DELETE FROM authorized_ips WHERE license_id IN (SELECT id FROM licenses WHERE user_id=$1)', [req.params.id]); await client.query('DELETE FROM licenses WHERE user_id=$1', [req.params.id]); await client.query('DELETE FROM subscriptions WHERE user_id=$1', [req.params.id]); await client.query('DELETE FROM orders WHERE user_id=$1', [req.params.id]); const result = await client.query('DELETE FROM users WHERE id=$1', [req.params.id]); if (!result.rowCount) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Usuário não encontrado.' }); } await client.query('COMMIT'); res.json({ ok: true }); }
-    catch (error) { await client.query('ROLLBACK'); throw error; } finally { client.release(); }
-  }));
-  app.get('/api/admin/licenses', ...admin, wrap(async (_req, res) => res.json((await pool.query('SELECT l.id,l.status,l.created_at,u.id user_id,u.name,u.email,p.name product FROM licenses l JOIN users u ON u.id=l.user_id JOIN products p ON p.id=l.product_id ORDER BY l.id DESC LIMIT 200')).rows)));
-  app.post('/api/admin/licenses', ...admin, wrap(async (req, res) => {
-    const userId = String(req.body?.user_id || ''), slug = String(req.body?.product || '').trim();
-    if (!/^\d+$/.test(userId) || !/^[a-z0-9-]{2,80}$/.test(slug)) return res.status(400).json({ error: 'Informe um ID de cliente e um produto válidos.' });
-    const user = (await pool.query('SELECT id FROM users WHERE id=$1', [userId])).rows[0];
-    const product = (await pool.query('SELECT id,slug,price_cents FROM products WHERE slug=$1 AND active=TRUE', [slug])).rows[0];
-    if (!user) return res.status(404).json({ error: 'Cliente não encontrado.' });
-    if (!product) return res.status(404).json({ error: 'Produto não encontrado ou inativo.' });
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
-      const order = (await client.query("INSERT INTO orders (user_id,product_id,amount_cents,original_amount_cents,status) VALUES ($1,$2,$3,$3,'approved') RETURNING id", [user.id, product.id, product.price_cents])).rows[0];
-      const key = createLicenseKey(product.slug);
-      const license = (await client.query("INSERT INTO licenses (order_id,user_id,product_id,license_key_fingerprint,license_key_hash,key_encrypted,source,status) VALUES ($1,$2,$3,$4,$5,$6,'admin','active') RETURNING id", [order.id, user.id, product.id, fingerprint(key), await bcrypt.hash(key, 12), vault.encrypt(key, order.id)])).rows[0];
-      await client.query('COMMIT'); res.status(201).json({ ok: true, license_id: license.id });
-    } catch (error) { await client.query('ROLLBACK'); throw error; } finally { client.release(); }
-  }));
-  app.post('/api/admin/licenses/:id/revoke', ...admin, wrap(async (req, res) => { await pool.query("UPDATE licenses SET status='revoked' WHERE id=$1", [req.params.id]); res.json({ok:true}); }));
-  app.delete('/api/admin/licenses/:id', ...admin, wrap(async (req, res) => { if (!/^\d+$/.test(req.params.id)) return res.status(400).json({ error: 'Licença inválida.' }); const client = await pool.connect(); try { await client.query('BEGIN'); const row = (await client.query('SELECT order_id FROM licenses WHERE id=$1 FOR UPDATE', [req.params.id])).rows[0]; if (!row) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Licença não encontrada.' }); } await client.query('DELETE FROM authorized_ips WHERE license_id=$1', [req.params.id]); await client.query('DELETE FROM licenses WHERE id=$1', [req.params.id]); await client.query('DELETE FROM orders WHERE id=$1', [row.order_id]); await client.query('COMMIT'); res.json({ ok: true }); } catch (error) { await client.query('ROLLBACK'); throw error; } finally { client.release(); } }));
-  app.post('/api/admin/users/:id/password', ...admin, wrap(async (req, res) => {
-    const password = String(req.body?.password || '');
-    if (!/^\d+$/.test(req.params.id) || password.length < 8 || password.length > 200) return res.status(400).json({ error: 'A senha deve ter entre 8 e 200 caracteres.' });
-    const result = await pool.query('UPDATE users SET password_hash=$1 WHERE id=$2', [await bcrypt.hash(password, 12), req.params.id]);
-    if (!result.rowCount) return res.status(404).json({ error: 'Cliente não encontrado.' });
-    res.json({ ok: true });
-  }));
-  app.get('/api/admin/coupons', ...admin, wrap(async (_req, res) => res.json((await pool.query('SELECT * FROM coupons ORDER BY created_at DESC')).rows)));
-  app.post('/api/admin/coupons', ...admin, wrap(async (req, res) => { const code=String(req.body.code||'').trim().toUpperCase(); const type=req.body.discount_type==='percent'?'percent':'fixed'; const value=Number(req.body.discount_value); if(!/^[A-Z0-9_-]{3,40}$/.test(code)||!Number.isInteger(value)||value<=0||(type==='percent'&&value>100)) return res.status(400).json({error:'Dados do cupom inválidos.'}); const row=(await pool.query('INSERT INTO coupons (code,discount_type,discount_value,max_uses,expires_at) VALUES ($1,$2,$3,$4,$5) RETURNING *',[code,type,value,req.body.max_uses||null,req.body.expires_at||null])).rows[0]; res.status(201).json(row); }));
-  app.delete('/api/admin/coupons/:code', ...admin, wrap(async (req,res)=>{await pool.query('UPDATE coupons SET active=FALSE WHERE code=$1',[req.params.code.toUpperCase()]);res.json({ok:true});}));
-  app.get('/api/admin/support-agents', ...admin, wrap(async (_req,res)=>res.json((await pool.query('SELECT a.*,u.name,u.email FROM support_agents a JOIN users u ON u.id=a.user_id ORDER BY a.created_at')).rows)));
-  app.post('/api/admin/support-agents', ...admin, wrap(async (req,res)=>{const user=(await pool.query('SELECT id FROM users WHERE email=LOWER($1)',[String(req.body.email||'')])).rows[0];if(!user)return res.status(404).json({error:'Usuário não encontrado.'});await pool.query('INSERT INTO support_agents(user_id,active) VALUES($1,TRUE) ON CONFLICT(user_id) DO UPDATE SET active=TRUE',[user.id]);res.json({ok:true});}));
-  app.delete('/api/admin/support-agents/:id', ...admin, wrap(async(req,res)=>{await pool.query('UPDATE support_agents SET active=FALSE WHERE user_id=$1',[req.params.id]);res.json({ok:true});}));
-
-  app.post('/api/mercadopago/subscription-webhook', wrap(async (req,res)=>{const id=String(req.body?.data?.id||req.query['data.id']||'');if(!id)return res.sendStatus(200);const mp=await mercadoPago('/preapproval/'+encodeURIComponent(id));const sub=(await pool.query('SELECT * FROM subscriptions WHERE mercado_pago_id=$1',[id])).rows[0];if(sub){const status=mp.status==='authorized'?'active':mp.status==='paused'?'paused':'cancelled';const end=mp.next_payment_date||mp.date_created;await pool.query('UPDATE subscriptions SET status=$1,current_period_end=$2,updated_at=NOW() WHERE id=$3',[status,end,sub.id]);if(status==='active'){const plan=(await pool.query('SELECT * FROM subscription_plans WHERE id=$1',[sub.plan_id])).rows[0];if(plan) await activateSubscription(sub,plan);}else await pool.query("UPDATE licenses SET status='suspended' WHERE subscription_id=$1",[sub.id]);}res.sendStatus(200);}));
-  const expire = async () => { await pool.query("UPDATE subscriptions SET status='expired',updated_at=NOW() WHERE status='active' AND current_period_end<=NOW()"); await pool.query("UPDATE licenses SET status='suspended' WHERE source='subscription' AND status='active' AND subscription_id IN (SELECT id FROM subscriptions WHERE status<>'active' OR current_period_end<=NOW())"); };
-  setInterval(() => expire().catch(e=>console.error('Expiração:',e.code||e.name)), 15*60*1000);
-}
-module.exports = install;
+      const tickets = await request('/api/support/tickets'); list.replaceChildren();
+      if (!tickets.length) list.append(make('p', 'Nenhum chamado aberto ainda.', 'support-empty'));
+      tickets.forEach(ticket => { const row = make('button', undefined, 'ticket-select'); row.type = 'button'; row.append(make('strong', ticket.subject), make('small', (ticket.customer_name || ticket.email) + ' · ' + ticket.status)); row.addEventListener('click', () => openTicket(ticket.id)); list.append(row); });
+    } catch (error) { list.replaceChildren(make('p', error.message, 'support-empty')); }
+  }
+  reply.addEventListener('submit', async event => { event.preventDefault(); if (!selected) return; const button = reply.querySelector('button'); button.disabled = true; try { await request('/api/support/tickets/' + selected + '/messages', { method: 'POST', body: JSON.stringify({ body: reply.body.value.trim() }) }); reply.reset(); await openTicket(selected); await load(); } catch (error) { alert(error.message); } finally { button.disabled = false; } });
+  section.querySelector('#admin-support-refresh').addEventListener('click', load);
+  load();
+})();

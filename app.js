@@ -63,13 +63,14 @@ $('#register-form').addEventListener('submit', async e => {
   } catch (error) { alert(error.message); }
 });
 
+
 // Painel autenticado: produtos e permissões vêm da API, nunca do armazenamento local.
 const customerStyle = document.createElement('link');
 customerStyle.rel = 'stylesheet'; customerStyle.href = 'customer.css';
 if (!document.querySelector('link[href="customer.css"]')) document.head.append(customerStyle);
 const customerPanel = document.createElement('section');
 customerPanel.id = 'customer-panel'; customerPanel.hidden = true;
-customerPanel.innerHTML = `<div class="customer-head"><div><span class="section-kicker">VORTEX COLLECTIONS</span><h1>Minha área</h1><p id="customer-welcome"></p></div><div class="customer-actions"><button id="customer-store" class="btn btn-outline">Voltar à loja</button><button id="customer-refresh" class="btn btn-outline">Atualizar</button><button id="customer-logout" class="btn btn-outline">Sair</button></div></div>
+customerPanel.innerHTML = `<div class="customer-head"><div><span class="section-kicker">VORTEX COLLECTIONS</span><h1>Minha área</h1><p id="customer-welcome"></p><p id="customer-account-id" class="customer-account-id">ID da conta: carregando...</p></div><div class="customer-actions"><button id="customer-store" class="btn btn-outline">Voltar à loja</button><button id="customer-refresh" class="btn btn-outline">Atualizar</button><button id="customer-logout" class="btn btn-outline">Sair</button></div></div>
 <p id="customer-message" role="status" aria-live="polite"></p>
 <h2>Meus plugins</h2><div id="customer-licenses" class="customer-grid"></div>
 <h2>Meus pedidos</h2><div id="customer-orders"></div>
@@ -171,6 +172,7 @@ async function showCustomer() {
     const [user, licenses, orders] = await Promise.all([customerRequest('/api/me'), customerRequest('/api/me/licenses'), customerRequest('/api/me/orders')]);
     if (load !== customerLoad) return;
     $('#customer-welcome').textContent = user.name + ' · ' + user.email;
+    $('#customer-account-id').textContent = 'ID da conta: ' + user.id;
     if (user.role === 'admin' && !customerPanel.querySelector('[data-admin-link]')) { const adminLink = element('a', 'Administração', 'btn btn-outline'); adminLink.href = 'admin.html'; adminLink.dataset.adminLink = 'true'; customerPanel.querySelector('.customer-actions').append(adminLink); }
     if (!licenses.length) $('#customer-licenses').append(element('p', 'Nenhum plugin liberado ainda. Veja o status dos seus pedidos abaixo.'));
     else licenses.forEach(license => $('#customer-licenses').append(renderLicense(license)));

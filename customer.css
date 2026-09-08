@@ -13,6 +13,7 @@
 #customer-panel h2{font-size:26px;margin:30px 0 18px}
 #customer-panel h3{font:700 36px/1.15 'Barlow Condensed',sans-serif;margin:15px 0}
 #customer-panel h4{font-size:18px;margin:24px 0 10px}
+.customer-account-id{display:inline-block;padding:8px 12px;border:1px solid #75cbff55;border-radius:7px;color:#9ae4c5!important;font-weight:700}
 .customer-head{display:flex;justify-content:space-between;align-items:center;gap:20px;border-bottom:1px solid #493035;padding-bottom:24px}
 .customer-actions{display:flex;flex-wrap:wrap;gap:10px}
 #customer-panel .btn{font-size:14px;line-height:1.4;min-height:44px;margin:8px 0}

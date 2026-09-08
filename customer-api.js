@@ -31,7 +31,7 @@ function install({ app, pool, auth, bcrypt, vault, fingerprint, createLicenseKey
   app.get('/api/me', auth, wrap(async (req, res) => {
     const user = (await pool.query('SELECT id,name,email,role FROM users WHERE id=$1', [req.user.sub])).rows[0];
     if (!user) return res.status(401).json({ error: 'Conta não encontrada.' });
-    res.json(user);
+    res.json({ ...user, is_admin: user.role === 'admin' && Boolean(process.env.ADMIN_USER_ID) && String(user.id) === String(process.env.ADMIN_USER_ID) });
   }));
   app.get('/api/me/orders', auth, wrap(async (req, res) => {
     res.json((await pool.query(`SELECT o.id,o.status,o.amount_cents,o.created_at,p.name AS product

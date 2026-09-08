@@ -33,3 +33,4 @@
 .customer-reconcile{margin-top:30px;padding:22px;border:1px solid #493035;border-radius:8px}
 .customer-reconcile summary{cursor:pointer;font-weight:600}
 @media(max-width:760px){.customer-grid{grid-template-columns:1fr}.customer-head{align-items:flex-start;flex-direction:column}#customer-panel{padding:30px 18px}.customer-card{padding:20px}}
+.customer-admin-card{display:flex;align-items:center;justify-content:space-between;gap:24px;margin:26px 0;padding:24px 26px;border:1px solid #8ee5b966;border-radius:16px;background:linear-gradient(120deg,#123c35,#102333);box-shadow:0 14px 35px #0004}.customer-admin-card h2{margin:5px 0 6px!important;color:#fff}.customer-admin-card p{margin:0;color:#b8d9cf}.customer-admin-card .btn{white-space:nowrap}@media(max-width:600px){.customer-admin-card{align-items:flex-start;flex-direction:column}.customer-admin-card .btn{width:100%}}

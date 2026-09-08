@@ -72,6 +72,7 @@ const customerPanel = document.createElement('section');
 customerPanel.id = 'customer-panel'; customerPanel.hidden = true;
 customerPanel.innerHTML = `<div class="customer-head"><div><span class="section-kicker">VORTEX COLLECTIONS</span><h1>Minha área</h1><p id="customer-welcome"></p><p id="customer-account-id" class="customer-account-id">ID da conta: carregando...</p></div><div class="customer-actions"><button id="customer-store" class="btn btn-outline">Voltar à loja</button><button id="customer-refresh" class="btn btn-outline">Atualizar</button><button id="customer-logout" class="btn btn-outline">Sair</button></div></div>
 <p id="customer-message" role="status" aria-live="polite"></p>
+<section id="customer-admin-card" class="customer-admin-card" hidden><div><span class="section-kicker">ACESSO RESTRITO</span><h2>Administração</h2><p>Painel de licenças, cupons, senhas e chamados da equipe.</p></div><a class="btn btn-primary" href="admin.html">Abrir painel administrativo <span>→</span></a></section>
 <h2>Meus plugins</h2><div id="customer-licenses" class="customer-grid"></div>
 <h2>Meus pedidos</h2><div id="customer-orders"></div>
 <details class="customer-reconcile"><summary>Já paguei, mas meu plugin não apareceu</summary><p>Use a mesma conta em que comprou. Digite o número do pagamento do Mercado Pago para consultar a aprovação.</p><form id="customer-reconcile"><label>Número do pagamento<input name="payment_id" inputmode="numeric" pattern="[0-9]+" required maxlength="30"></label><button class="btn btn-primary">Consultar pagamento</button></form></details>`;
@@ -173,7 +174,8 @@ async function showCustomer() {
     if (load !== customerLoad) return;
     $('#customer-welcome').textContent = user.name + ' · ' + user.email;
     $('#customer-account-id').textContent = 'ID da conta: ' + user.id;
-    if (user.role === 'admin' && !customerPanel.querySelector('[data-admin-link]')) { const adminLink = element('a', 'Administração', 'btn btn-outline'); adminLink.href = 'admin.html'; adminLink.dataset.adminLink = 'true'; customerPanel.querySelector('.customer-actions').append(adminLink); }
+    const adminCard = $('#customer-admin-card'); adminCard.hidden = user.is_admin !== true;
+    if (user.is_admin === true && !customerPanel.querySelector('[data-admin-link]')) { const adminLink = element('a', 'Administração', 'btn btn-outline'); adminLink.href = 'admin.html'; adminLink.dataset.adminLink = 'true'; customerPanel.querySelector('.customer-actions').append(adminLink); }
     if (!licenses.length) $('#customer-licenses').append(element('p', 'Nenhum plugin liberado ainda. Veja o status dos seus pedidos abaixo.'));
     else licenses.forEach(license => $('#customer-licenses').append(renderLicense(license)));
     const statuses = { approved: 'Aprovado', pending: 'Aguardando pagamento', rejected: 'Recusado', cancelled: 'Cancelado' };

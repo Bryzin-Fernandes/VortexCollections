@@ -8,7 +8,7 @@ async function protectAdminPage() {
   try {
     const response = await fetch(ADMIN_API + '/api/me', { headers: { Authorization: 'Bearer ' + token } });
     const user = await response.json();
-    if (!response.ok || user.role !== 'admin') { location.replace('index.html#cliente'); return false; }
+    if (!response.ok || user.is_admin !== true) { location.replace('index.html#cliente'); return false; }
     document.body.style.display = '';
     const supportScript = document.createElement('script'); supportScript.src = 'admin-support.js'; document.body.append(supportScript);
     return true;

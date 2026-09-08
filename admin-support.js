@@ -77,6 +77,7 @@ function install({ app, pool, auth, mercadoPago, createLicenseKey, bcrypt, vault
   app.post('/api/support/tickets/:id/messages', auth, wrap(async (req, res) => {
     const ticket = (await pool.query('SELECT * FROM support_tickets WHERE id=$1', [req.params.id])).rows[0];
     if (!ticket) return res.sendStatus(404);
+    if (ticket.status === 'closed') return res.status(409).json({ error: 'Este ticket já foi finalizado.' });
     const isStaff = await isPrimaryAdmin(req.user) || (await pool.query('SELECT 1 FROM support_agents WHERE user_id=$1 AND active=TRUE', [req.user.sub])).rowCount;
     if (!isStaff && String(ticket.user_id) !== String(req.user.sub)) return res.sendStatus(404);
     const body = String(req.body.body || '').trim().slice(0,5000); if (!body) return res.status(400).json({ error: 'Mensagem vazia.' });
@@ -84,7 +85,7 @@ function install({ app, pool, auth, mercadoPago, createLicenseKey, bcrypt, vault
     await pool.query("UPDATE support_tickets SET status=$1,updated_at=NOW() WHERE id=$2", [isStaff ? 'waiting_customer' : 'open', ticket.id]);
     res.status(201).json({ ok: true });
   }));
-  app.post('/api/support/tickets/:id/close', auth, wrap(async (req, res) => { const t=(await pool.query('SELECT user_id FROM support_tickets WHERE id=$1',[req.params.id])).rows[0]; if(!t||String(t.user_id)!==String(req.user.sub)) return res.sendStatus(404); await pool.query("UPDATE support_tickets SET status='closed',updated_at=NOW() WHERE id=$1",[req.params.id]); res.json({ok:true}); }));
+  app.post('/api/support/tickets/:id/close', auth, wrap(async (req, res) => { const t=(await pool.query('SELECT user_id FROM support_tickets WHERE id=$1',[req.params.id])).rows[0]; if(!t) return res.sendStatus(404); const staff=await isPrimaryAdmin(req.user)||(await pool.query('SELECT 1 FROM support_agents WHERE user_id=$1 AND active=TRUE',[req.user.sub])).rowCount>0; if(!staff&&String(t.user_id)!==String(req.user.sub)) return res.sendStatus(404); await pool.query("UPDATE support_tickets SET status='closed',updated_at=NOW() WHERE id=$1",[req.params.id]); res.json({ok:true}); }));
 
   app.get('/api/admin/overview', ...admin, wrap(async (_req, res) => res.json({ users: (await pool.query('SELECT COUNT(*)::int count FROM users')).rows[0].count, licenses: (await pool.query("SELECT COUNT(*)::int count FROM licenses WHERE status='active'")).rows[0].count, tickets: (await pool.query("SELECT COUNT(*)::int count FROM support_tickets WHERE status<>'closed'")).rows[0].count, coupons: (await pool.query('SELECT COUNT(*)::int count FROM coupons WHERE active=TRUE')).rows[0].count })));
   app.get('/api/admin/users', ...admin, wrap(async (_req, res) => res.json((await pool.query("SELECT u.id,u.name,u.email,u.role,u.created_at,COUNT(DISTINCT l.id)::int AS licenses FROM users u LEFT JOIN licenses l ON l.user_id=u.id GROUP BY u.id ORDER BY u.id DESC LIMIT 500")).rows)));

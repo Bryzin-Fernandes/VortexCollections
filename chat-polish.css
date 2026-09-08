@@ -1,0 +1,10 @@
+.support-thread{scrollbar-color:#55c79a #091320;scrollbar-width:thin}
+.chat-message{position:relative;max-width:min(78%,520px);padding:14px 16px 12px;border-radius:18px;box-shadow:0 8px 18px #0002}
+.chat-message.from-customer{margin-right:auto;margin-left:0;border-bottom-left-radius:5px;background:linear-gradient(145deg,#172f49,#102238)}
+.chat-message.from-staff{margin-left:auto;margin-right:0;border-bottom-right-radius:5px;background:linear-gradient(145deg,#167354,#104b3d);border-color:#8ee5b977}
+.chat-message.from-customer:before,.chat-message.from-staff:before{display:block;margin-bottom:6px;font-size:9px;font-weight:800;letter-spacing:.14em}
+.chat-message.from-customer:before{content:'VOCÊ';color:#a9c9e5}
+.chat-message.from-staff:before{content:'SUPORTE';color:#b9f5d6}
+.chat-message p{line-height:1.55}
+.chat-message small{opacity:.75;margin-top:8px}
+@media(max-width:600px){.chat-message{max-width:91%}}

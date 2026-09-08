@@ -149,9 +149,23 @@ async function start() {
   await pool.query('ALTER TABLE orders ADD COLUMN IF NOT EXISTS coupon_id BIGINT');
   await pool.query("ALTER TABLE licenses ADD COLUMN IF NOT EXISTS source VARCHAR(20) NOT NULL DEFAULT 'purchase'");
   await pool.query('ALTER TABLE licenses ADD COLUMN IF NOT EXISTS subscription_id BIGINT');
-  if (process.env.PLAN_BETA_PRICE_CENTS) await pool.query("UPDATE subscription_plans SET price_cents=$1 WHERE slug='beta'", [Number(process.env.PLAN_BETA_PRICE_CENTS)]);
-  if (process.env.PLAN_PREMIUM_PRICE_CENTS) await pool.query("UPDATE subscription_plans SET price_cents=$1 WHERE slug='premium'", [Number(process.env.PLAN_PREMIUM_PRICE_CENTS)]);
+  await pool.query('CREATE TABLE IF NOT EXISTS password_reset_tokens (id BIGSERIAL PRIMARY KEY,user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,token_hash CHAR(64) NOT NULL UNIQUE,expires_at TIMESTAMPTZ NOT NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())');
+  const betaPrice = optionalPlanPrice('PLAN_BETA_PRICE_CENTS');
+  const premiumPrice = optionalPlanPrice('PLAN_PREMIUM_PRICE_CENTS');
+  if (betaPrice !== null) await pool.query("UPDATE subscription_plans SET price_cents=$1 WHERE slug='beta'", [betaPrice]);
+  if (premiumPrice !== null) await pool.query("UPDATE subscription_plans SET price_cents=$1 WHERE slug='premium'", [premiumPrice]);
   app.listen(port, '0.0.0.0', () => console.log(`Vortex API ouvindo na porta ${port}`));
+}
+
+function optionalPlanPrice(name) {
+  const raw = String(process.env[name] || '').trim();
+  if (!raw || raw === '0') return null;
+  const value = Number(raw);
+  if (!Number.isSafeInteger(value) || value < 0) {
+    console.warn(`${name} inválida; use somente centavos, por exemplo 2990. Plano permanecerá desativado até receber um valor válido.`);
+    return null;
+  }
+  return value;
 }
 
 start().catch(error => {

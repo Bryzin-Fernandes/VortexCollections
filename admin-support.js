@@ -88,6 +88,13 @@ function install({ app, pool, auth, mercadoPago, createLicenseKey, bcrypt, vault
     const order=(await pool.query("INSERT INTO orders (user_id,product_id,amount_cents,status) SELECT $1,id,price_cents,'approved' FROM products WHERE id=$2 RETURNING id,product_id,user_id",[row.user_id,row.product_id])).rows[0]; const key=createLicenseKey(row.slug); await pool.query('INSERT INTO licenses (order_id,user_id,product_id,license_key_fingerprint,license_key_hash,key_encrypted) VALUES ($1,$2,$3,$4,$5,$6)',[order.id,row.user_id,row.product_id,fingerprint(key),await bcrypt.hash(key,12),vault.encrypt(key,order.id)]); res.status(201).json({ ok:true });
   }));
   app.post('/api/admin/licenses/:id/revoke', ...admin, wrap(async (req, res) => { await pool.query("UPDATE licenses SET status='revoked' WHERE id=$1", [req.params.id]); res.json({ok:true}); }));
+  app.post('/api/admin/users/:id/password', ...admin, wrap(async (req, res) => {
+    const password = String(req.body?.password || '');
+    if (!/^\d+$/.test(req.params.id) || password.length < 8 || password.length > 200) return res.status(400).json({ error: 'A senha deve ter entre 8 e 200 caracteres.' });
+    const result = await pool.query('UPDATE users SET password_hash=$1 WHERE id=$2', [await bcrypt.hash(password, 12), req.params.id]);
+    if (!result.rowCount) return res.status(404).json({ error: 'Cliente não encontrado.' });
+    res.json({ ok: true });
+  }));
   app.get('/api/admin/coupons', ...admin, wrap(async (_req, res) => res.json((await pool.query('SELECT * FROM coupons ORDER BY created_at DESC')).rows)));
   app.post('/api/admin/coupons', ...admin, wrap(async (req, res) => { const code=String(req.body.code||'').trim().toUpperCase(); const type=req.body.discount_type==='percent'?'percent':'fixed'; const value=Number(req.body.discount_value); if(!/^[A-Z0-9_-]{3,40}$/.test(code)||!Number.isInteger(value)||value<=0||(type==='percent'&&value>100)) return res.status(400).json({error:'Dados do cupom inválidos.'}); const row=(await pool.query('INSERT INTO coupons (code,discount_type,discount_value,max_uses,expires_at) VALUES ($1,$2,$3,$4,$5) RETURNING *',[code,type,value,req.body.max_uses||null,req.body.expires_at||null])).rows[0]; res.status(201).json(row); }));
   app.delete('/api/admin/coupons/:code', ...admin, wrap(async (req,res)=>{await pool.query('UPDATE coupons SET active=FALSE WHERE code=$1',[req.params.code.toUpperCase()]);res.json({ok:true});}));

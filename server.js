@@ -9,7 +9,7 @@ const fs = require('fs');
 const path = require('path');
 const { Pool } = require('pg');
 const vault = require('./license-vault');
-const installAdminSupport = require('./admin-support');
+const installAdminSupport = require('./admin-support-api');
 
 const app = express();
 const port = Number(process.env.PORT || 10000);

@@ -53,7 +53,7 @@ function install({ app, pool, auth, bcrypt, vault, fingerprint, createLicenseKey
         try { key = vault.decrypt(row.key_encrypted, row.order_id); } catch (_) { key_error = true; }
       }
       return { id: row.id, product: row.product, slug: row.slug, status: active ? 'active' : row.status === 'active' ? 'suspended' : row.status,
-        source: row.source || 'purchase', expires_at: row.expires_at, minecraft_versions: row.minecraft_versions || '1.21', description: details[row.slug] || '', created_at: row.created_at, authorized_ips: row.authorized_ips,
+        source: row.source || 'purchase', expires_at: row.expires_at, minecraft_versions: row.minecraft_versions || '1.8–1.21', description: details[row.slug] || '', created_at: row.created_at, authorized_ips: row.authorized_ips,
         key, key_error, needs_reissue: active && !row.key_encrypted,
         download_available: active && Boolean(process.env[downloadEnv[row.slug]]) };
     }));

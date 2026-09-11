@@ -7,6 +7,7 @@
     { slug:'vortex-thepit', name:'VortexThePIT', price_cents:12500, short:'TP', category:'PvP', color:'amber', badge:'Evolua a cada partida', description:'Combates, progressão e recompensas para seus jogadores terem sempre um próximo objetivo.', features:['Cosméticos, nível e rank','Drop de gold, spawn e dinheiro','Leaderboard clicável'] },
     { slug:'vortex-skywars', name:'VortexSkyWars', price_cents:0, short:'SW', category:'Minigame', color:'sky', badge:'Seu próximo minigame', description:'Ilhas, desafios e diferentes formas de competir. Uma experiência completa para sua rede.', features:['Solo, dupla, trio, quarteto e Overpower','1v1, 2v2, 3v3, missões e desafios','Kits, habilidades, cosméticos e jaulas'] }
   ];
+  meta.forEach(product => { product.minecraft_versions = '1.8–1.21'; });
   const V = window.Vortex = {
     meta, apiBase:window.VORTEX_CONFIG.apiBase.replace(/\/$/,''),
     token:()=>sessionStorage.getItem('vortex_token') || localStorage.getItem('vortex_token'),
@@ -40,4 +41,14 @@
   document.querySelectorAll('[data-icon]').forEach(el=>el.innerHTML=V.icon(el.dataset.icon));
   const footer=document.getElementById('site-footer');if(footer)footer.innerHTML=`<div class="footer-top"><div><a class="logo" href="index.html"><span class="logo-symbol">V</span>vortex collections</a><p>Seu servidor tem potencial.<br>A gente ajuda a ir além.</p></div><div><strong>Explore</strong><a href="index.html#produtos">Nossos plugins</a><a href="planos.html">Planos mensais</a><a href="equipe.html">Nossa equipe</a></div><div><strong>Precisou? Estamos aqui.</strong><a href="cliente.html#atendimentos">Abrir atendimento</a><a href="https://discord.gg/FabjYWPA9k" target="_blank" rel="noopener">Discord ↗</a><a href="https://wa.me/5534998170791" target="_blank" rel="noopener">WhatsApp ↗</a></div></div><div class="footer-bottom"><span>© ${new Date().getFullYear()} Vortex Collections.</span><a href="regras.html">Regras e licenciamento</a><span>Projeto independente, sem afiliação à Mojang ou Microsoft.</span></div>`;
   if(V.token()) V.userPromise=V.request('/api/me').then(user=>{const el=document.getElementById('header-account');if(el){el.replaceChildren(V.avatar(user.minecraft_nick,32),V.el('span',user.minecraft_nick || user.name));}return user;}).catch(e=>{if(e.status===401){localStorage.removeItem('vortex_token');sessionStorage.removeItem('vortex_token');}return null;});else V.userPromise=Promise.resolve(null);
+})();
+
+(() => {
+  const footer = document.getElementById('site-footer');
+  if (!footer || footer.querySelector('[data-company-registration]')) return;
+  const company = document.createElement('div');
+  company.className = 'footer-company';
+  company.dataset.companyRegistration = 'true';
+  company.innerHTML = '<span>Vortex Collections</span><span>CNPJ: 66.004.874/0001-25</span><span>Plugins para Minecraft · 1.8 até 1.21</span>';
+  footer.append(company);
 })();

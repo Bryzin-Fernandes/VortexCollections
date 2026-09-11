@@ -23,3 +23,21 @@ $('#user-editor').addEventListener('submit',async e=>{e.preventDefault();const f
 $('#user-editor-clear').addEventListener('click',()=>$('#user-editor').reset());
 $('#users-refresh').addEventListener('click',loadUsers);
 window.loadVortexAdmin = () => Promise.all([loadOverview(),loadUsers(),loadLicenses(),loadCoupons(),loadAgents()]).catch(e=>msg(e.message));
+
+(() => {
+  const shell = document.querySelector('.admin-shell');
+  const heading = shell?.querySelector('.admin-heading');
+  if (!shell || !heading || shell.querySelector('[data-admin-status]')) return;
+  const status = document.createElement('div');
+  status.className = 'admin-statusbar';
+  status.dataset.adminStatus = 'true';
+  status.innerHTML = '<span class="admin-status-chip"><i></i>API protegida</span><span class="admin-status-chip">5 plugins ativos</span><span class="admin-status-chip">Minecraft 1.8–1.21</span><span class="admin-status-chip">CNPJ 66.004.874/0001-25</span>';
+  heading.after(status);
+  const overview = shell.querySelector('[data-admin-panel="overview"]');
+  if (!overview || overview.querySelector('[data-admin-overview-info]')) return;
+  const info = document.createElement('div');
+  info.className = 'admin-overview-info';
+  info.dataset.adminOverviewInfo = 'true';
+  info.innerHTML = '<article class="admin-info-card">'+window.Vortex.icon('shield')+'<strong>Licenças protegidas</strong><span>Chave e IP único por produto.</span></article><article class="admin-info-card">'+window.Vortex.icon('cart')+'<strong>Mercado Pago</strong><span>Pedidos conferidos pela API.</span></article><article class="admin-info-card">'+window.Vortex.icon('settings')+'<strong>Catálogo atualizado</strong><span>Produtos de 1.8 até 1.21.</span></article><article class="admin-info-card">'+window.Vortex.icon('chat')+'<strong>Atendimento</strong><span>Tickets respondidos pela equipe.</span></article>';
+  overview.append(info);
+})();

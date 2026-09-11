@@ -1,9 +1,9 @@
 ALTER TABLE users ADD COLUMN IF NOT EXISTS minecraft_nick VARCHAR(16);
-ALTER TABLE products ADD COLUMN IF NOT EXISTS minecraft_versions TEXT NOT NULL DEFAULT '1.21';
+ALTER TABLE products ADD COLUMN IF NOT EXISTS minecraft_versions TEXT NOT NULL DEFAULT '1.8–1.21';
 INSERT INTO products (slug,name,price_cents,minecraft_versions)
-VALUES ('vortex-bedwars','VortexBedWars',15000,'1.21')
+VALUES ('vortex-bedwars','VortexBedWars',15000,'1.8–1.21')
 ON CONFLICT (slug) DO UPDATE SET name=EXCLUDED.name,price_cents=EXCLUDED.price_cents,minecraft_versions=EXCLUDED.minecraft_versions;
-UPDATE products SET minecraft_versions='1.21' WHERE slug IN ('vortex-kitpvp','vortex-feast','vortex-thepit','vortex-skywars','vortex-bedwars');
+UPDATE products SET minecraft_versions='1.8–1.21' WHERE slug IN ('vortex-kitpvp','vortex-feast','vortex-thepit','vortex-skywars','vortex-bedwars');
 
 CREATE TABLE IF NOT EXISTS checkout_sessions (
   id UUID PRIMARY KEY,

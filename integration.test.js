@@ -46,7 +46,7 @@ test('integração PostgreSQL: cadastro, carrinho, pagamento, licenças, perfil 
   assert.equal((await call('POST','/api/checkout',{items:['vortex-bedwars']})).status,401);
   const profile=await call('PATCH','/api/me/profile',{name:'Jogador',minecraft_nick:'NovoNick'},customer);assert.equal(profile.data.minecraft_nick,'NovoNick');
   assert.equal((await call('PATCH','/api/me/profile',{name:'Jogador',minecraft_nick:'../../wrong'},customer)).status,400);
-  const catalog=(await call('GET','/api/products')).data;assert.equal(catalog.length,5);assert.equal(catalog.find(p=>p.slug==='vortex-bedwars').price_cents,15000);assert.ok(catalog.every(p=>p.minecraft_versions==='1.21'));
+  const catalog=(await call('GET','/api/products')).data;assert.equal(catalog.length,5);assert.equal(catalog.find(p=>p.slug==='vortex-bedwars').price_cents,15000);assert.ok(catalog.every(p=>p.minecraft_versions==='1.8–1.21'));
   assert.equal((await call('POST','/api/admin/coupons',{code:'VORTEX10',discount_type:'percent',discount_value:10,max_uses:1},admin)).status,201);
   const cart={items:['vortex-bedwars','vortex-feast'],coupon:'VORTEX10',request_id:crypto.randomUUID(),amount_cents:1};
   assert.equal((await call('POST','/api/cart/quote',cart,customer)).data.amount_cents,15300);

@@ -9,7 +9,7 @@
     const matches=products.filter(p=>(filter==='Todos'||p.category===filter) && (!search||(p.name+' '+p.description+' '+p.features.join(' ')).toLowerCase().includes(search)));
     for(const p of matches){
       const card=V.el('article',undefined,'product-card-new');
-      const art=V.el('div',undefined,'product-art '+p.color);art.append(V.el('span',p.badge),V.el('strong',p.short),V.el('small','MINECRAFT '+(p.minecraft_versions || '1.21')));
+      const art=V.el('div',undefined,'product-art '+p.color);art.append(V.el('span',p.badge),V.el('strong',p.short),V.el('small','MINECRAFT '+(p.minecraft_versions || '1.8–1.21')));
       const body=V.el('div',undefined,'product-content');body.append(V.el('h3',p.name),V.el('p',p.description));
       const ul=V.el('ul',undefined,'product-features');p.features.forEach(f=>ul.append(V.el('li',f)));body.append(ul);
       const row=V.el('div',undefined,'product-purchase'),price=V.el('div',undefined,'product-price');price.append(V.el('strong',p.price_cents?V.money(p.price_cents):'Sob consulta'),V.el('small',p.price_cents?'compra individual':'fale com a equipe'));row.append(price);

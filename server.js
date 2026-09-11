@@ -17,13 +17,7 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejec
 
 app.use(cors({ origin: process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',').map(v => v.trim()) : true }));
 app.use(express.json({ limit: '100kb' }));
-
-const products = new Map([
-  ['vortex-kitpvp', { name: 'VortexKitPvP', price: 12500 }],
-  ['vortex-feast', { name: 'VortexFeast', price: 2000 }],
-  ['vortex-thepit', { name: 'VortexThePIT', price: 12500 }],
-  ['vortex-skywars', { name: 'VortexSkyWars', price: 0 }]
-]);
+app.use('/api', (_req,res,next) => { res.set('Cache-Control','no-store'); next(); });
 
 function requiredEnv() {
   for (const name of ['DATABASE_URL', 'JWT_SECRET', 'LICENSE_SECRET', 'MP_ACCESS_TOKEN']) {
@@ -31,8 +25,8 @@ function requiredEnv() {
   }
 }
 
-function issueToken(user) {
-  return jwt.sign({ sub: String(user.id), role: user.role }, process.env.JWT_SECRET, { expiresIn: '7d' });
+function issueToken(user, remember = false) {
+  return jwt.sign({ sub: String(user.id), role: user.role }, process.env.JWT_SECRET, { expiresIn: remember ? '7d' : '12h' });
 }
 
 function auth(req, res, next) {
@@ -59,6 +53,7 @@ function createLicenseKey(productSlug) {
 async function mercadoPago(path, options = {}) {
   const response = await fetch(`https://api.mercadopago.com${path}`, {
     ...options,
+    signal: options.signal || AbortSignal.timeout(20000),
     headers: { Authorization: `Bearer ${process.env.MP_ACCESS_TOKEN}`, 'Content-Type': 'application/json', ...(options.headers || {}) }
   });
   const data = await response.json().catch(() => ({}));
@@ -78,7 +73,9 @@ async function provisionLicense(client, order) {
   return result.rowCount ? key : null;
 }
 
-require('./customer-api')({ app, pool, auth, bcrypt, vault, fingerprint, createLicenseKey, mercadoPago, provisionLicense });
+const { confirmCartPayment } = require('./commerce-api')({ app, pool, auth, mercadoPago, provisionLicense });
+require('./customer-api')({ app, pool, auth, bcrypt, vault, fingerprint, createLicenseKey, mercadoPago, provisionLicense, confirmCartPayment });
+require('./auth-api')({ app, pool, auth, bcrypt, issueToken });
 installAdminSupport({ app, pool, auth, mercadoPago, createLicenseKey, bcrypt, vault, fingerprint });
 
 app.get('/health', async (_req, res) => {
@@ -86,62 +83,12 @@ app.get('/health', async (_req, res) => {
   catch (_) { res.status(503).json({ ok: false }); }
 });
 
-app.post('/api/auth/register', async (req, res) => {
-  try {
-    const { name, email, password } = req.body || {};
-    if (!name || !email || !password || password.length < 8) return res.status(400).json({ error: 'Nome, e-mail e senha de 8 caracteres são obrigatórios.' });
-    const hash = await bcrypt.hash(password, 12);
-    const { rows } = await pool.query('INSERT INTO users (name, email, password_hash) VALUES ($1, LOWER($2), $3) RETURNING id, name, email, role', [name.trim(), email.trim(), hash]);
-    res.status(201).json({ user: rows[0], token: issueToken(rows[0]) });
-  } catch (error) {
-    res.status(error.code === '23505' ? 409 : 500).json({ error: error.code === '23505' ? 'E-mail já cadastrado.' : 'Não foi possível criar a conta.' });
-  }
-});
-
-app.post('/api/auth/login', async (req, res) => {
-  const { email, password } = req.body || {};
-  const { rows } = await pool.query('SELECT id, name, email, role, password_hash FROM users WHERE email = LOWER($1)', [email || '']);
-  if (!rows[0] || !(await bcrypt.compare(password || '', rows[0].password_hash))) return res.status(401).json({ error: 'E-mail ou senha inválidos.' });
-  const user = rows[0]; delete user.password_hash;
-  res.json({ user, token: issueToken(user) });
-});
-
-app.post('/api/checkout', auth, async (req, res) => {
-  const { product: slug, coupon: couponCode } = req.body || {};
-  const product = products.get(slug);
-  if (!product || product.price === 0) return res.status(400).json({ error: 'Produto inválido ou sem preço definido.' });
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-    const productRow = (await client.query('SELECT id, name, price_cents FROM products WHERE slug = $1 AND active = TRUE', [slug])).rows[0];
-    let amount = Number(productRow.price_cents), couponId = null, discount = 0;
-    const code = String(couponCode || '').trim().toUpperCase();
-    if (code) {
-      const coupon = (await client.query("SELECT * FROM coupons WHERE code=$1 AND active=TRUE AND (expires_at IS NULL OR expires_at>NOW()) AND (max_uses IS NULL OR used_count<max_uses) FOR UPDATE", [code])).rows[0];
-      if (!coupon) { await client.query('ROLLBACK'); return res.status(400).json({ error: 'Cupom inválido, expirado ou esgotado.' }); }
-      discount = coupon.discount_type === 'percent' ? Math.floor(amount * Number(coupon.discount_value) / 100) : Number(coupon.discount_value);
-      discount = Math.min(amount, Math.max(0, discount)); amount -= discount; couponId = coupon.id;
-    }
-    const order = (await client.query('INSERT INTO orders (user_id, product_id, amount_cents, original_amount_cents, discount_cents, coupon_id) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id', [req.user.sub, productRow.id, amount, productRow.price_cents, discount, couponId])).rows[0];
-    const preference = await mercadoPago('/checkout/preferences', { method: 'POST', body: JSON.stringify({
-      items: [{ id: slug, title: productRow.name, quantity: 1, currency_id: 'BRL', unit_price: amount / 100 }],
-      external_reference: String(order.id), notification_url: `${process.env.PUBLIC_URL}/api/mercadopago/webhook`,
-      back_urls: { success: `${process.env.PUBLIC_URL}/sucesso`, failure: `${process.env.PUBLIC_URL}/falha`, pending: `${process.env.PUBLIC_URL}/pendente` }
-    }) });
-    await client.query('UPDATE orders SET mercado_pago_id = $1 WHERE id = $2', [preference.id, order.id]);
-    if (couponId) await client.query('UPDATE coupons SET used_count=used_count+1 WHERE id=$1', [couponId]);
-    await client.query('COMMIT');
-    res.status(201).json({ checkout_url: preference.init_point, order_id: order.id });
-  } catch (error) { await client.query('ROLLBACK'); res.status(500).json({ error: 'Não foi possível criar o checkout.' }); }
-  finally { client.release(); }
-});
-
-
 async function start() {
   requiredEnv();
   const schemaPath = path.join(__dirname, 'schema.sql');
   const schema = fs.readFileSync(schemaPath, 'utf8');
   await pool.query(schema);
+  await pool.query(fs.readFileSync(path.join(__dirname, 'commerce.sql'), 'utf8'));
   await pool.query('ALTER TABLE licenses ADD COLUMN IF NOT EXISTS key_encrypted TEXT');
   await pool.query('ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_id TEXT UNIQUE');
   await pool.query('ALTER TABLE orders ADD COLUMN IF NOT EXISTS original_amount_cents INTEGER');

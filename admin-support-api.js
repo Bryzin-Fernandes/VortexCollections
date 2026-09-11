@@ -21,7 +21,7 @@ function install({ app, pool, auth, mercadoPago, createLicenseKey, bcrypt, vault
     next();
   })];
   const activePlan = async user => (await pool.query(`SELECT s.*,p.slug,p.name,p.features FROM subscriptions s JOIN subscription_plans p ON p.id=s.plan_id WHERE s.user_id=$1 AND s.status='active' AND s.current_period_end>NOW() ORDER BY s.current_period_end DESC LIMIT 1`, [user])).rows[0];
-  const entitlements = slug => slug === 'beta' ? ['vortex-kitpvp', 'vortex-feast'] : ['vortex-kitpvp', 'vortex-feast', 'vortex-thepit', 'vortex-skywars'];
+  const entitlements = slug => slug === 'beta' ? ['vortex-kitpvp', 'vortex-feast'] : ['vortex-kitpvp', 'vortex-feast', 'vortex-thepit', 'vortex-skywars', 'vortex-bedwars'];
   async function activateSubscription(sub, plan) {
     for (const slug of entitlements(plan.slug)) {
       const product = (await pool.query('SELECT id,slug FROM products WHERE slug=$1 AND active=TRUE', [slug])).rows[0];
@@ -122,7 +122,7 @@ function install({ app, pool, auth, mercadoPago, createLicenseKey, bcrypt, vault
     } catch (error) { await client.query('ROLLBACK'); throw error; } finally { client.release(); }
   }));
   app.post('/api/admin/licenses/:id/revoke', ...admin, wrap(async (req, res) => { await pool.query("UPDATE licenses SET status='revoked' WHERE id=$1", [req.params.id]); res.json({ok:true}); }));
-  app.delete('/api/admin/licenses/:id', ...admin, wrap(async (req, res) => { if (!/^\d+$/.test(req.params.id)) return res.status(400).json({ error: 'Licença inválida.' }); const client = await pool.connect(); try { await client.query('BEGIN'); const row = (await client.query('SELECT order_id FROM licenses WHERE id=$1 FOR UPDATE', [req.params.id])).rows[0]; if (!row) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Licença não encontrada.' }); } await client.query('DELETE FROM authorized_ips WHERE license_id=$1', [req.params.id]); await client.query('DELETE FROM licenses WHERE id=$1', [req.params.id]); await client.query('DELETE FROM orders WHERE id=$1', [row.order_id]); await client.query('COMMIT'); res.json({ ok: true }); } catch (error) { await client.query('ROLLBACK'); throw error; } finally { client.release(); } }));
+  app.delete('/api/admin/licenses/:id', ...admin, wrap(async (req, res) => { if (!/^\d+$/.test(req.params.id)) return res.status(400).json({ error: 'Licença inválida.' }); const client = await pool.connect(); try { await client.query('BEGIN'); const row = (await client.query('SELECT order_id FROM licenses WHERE id=$1 FOR UPDATE', [req.params.id])).rows[0]; if (!row) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Licença não encontrada.' }); } await client.query('DELETE FROM authorized_ips WHERE license_id=$1', [req.params.id]); await client.query('DELETE FROM licenses WHERE id=$1', [req.params.id]); await client.query("UPDATE orders SET status='cancelled' WHERE id=$1", [row.order_id]); await client.query('COMMIT'); res.json({ ok: true }); } catch (error) { await client.query('ROLLBACK'); throw error; } finally { client.release(); } }));
   app.post('/api/admin/users/:id/password', ...admin, wrap(async (req, res) => {
     const password = String(req.body?.password || '');
     if (!/^\d+$/.test(req.params.id) || password.length < 8 || password.length > 200) return res.status(400).json({ error: 'A senha deve ter entre 8 e 200 caracteres.' });
@@ -139,6 +139,6 @@ function install({ app, pool, auth, mercadoPago, createLicenseKey, bcrypt, vault
 
   app.post('/api/mercadopago/subscription-webhook', wrap(async (req,res)=>{const id=String(req.body?.data?.id||req.query['data.id']||'');if(!id)return res.sendStatus(200);const mp=await mercadoPago('/preapproval/'+encodeURIComponent(id));const sub=(await pool.query('SELECT * FROM subscriptions WHERE mercado_pago_id=$1',[id])).rows[0];if(sub){const status=mp.status==='authorized'?'active':mp.status==='paused'?'paused':'cancelled';const end=mp.next_payment_date||mp.date_created;await pool.query('UPDATE subscriptions SET status=$1,current_period_end=$2,updated_at=NOW() WHERE id=$3',[status,end,sub.id]);if(status==='active'){const plan=(await pool.query('SELECT * FROM subscription_plans WHERE id=$1',[sub.plan_id])).rows[0];if(plan) await activateSubscription(sub,plan);}else await pool.query("UPDATE licenses SET status='suspended' WHERE subscription_id=$1",[sub.id]);}res.sendStatus(200);}));
   const expire = async () => { await pool.query("UPDATE subscriptions SET status='expired',updated_at=NOW() WHERE status='active' AND current_period_end<=NOW()"); await pool.query("UPDATE licenses SET status='suspended' WHERE source='subscription' AND status='active' AND subscription_id IN (SELECT id FROM subscriptions WHERE status<>'active' OR current_period_end<=NOW())"); };
-  setInterval(() => expire().catch(e=>console.error('Expiração:',e.code||e.name)), 15*60*1000);
+  setInterval(() => expire().catch(e=>console.error('Expiração:',e.code||e.name)), 15*60*1000).unref();
 }
 module.exports = install;

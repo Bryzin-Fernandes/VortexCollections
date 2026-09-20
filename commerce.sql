@@ -1,4 +1,9 @@
 ALTER TABLE users ADD COLUMN IF NOT EXISTS minecraft_nick VARCHAR(16);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_public BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_mode VARCHAR(20) NOT NULL DEFAULT 'minecraft';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS banner_url TEXT;
+CREATE INDEX IF NOT EXISTS users_public_profile_idx ON users(profile_public);
 ALTER TABLE products ADD COLUMN IF NOT EXISTS minecraft_versions TEXT NOT NULL DEFAULT '1.8–1.21';
 INSERT INTO products (slug,name,price_cents,minecraft_versions)
 VALUES ('vortex-bedwars','VortexBedWars',15000,'1.8–1.21')

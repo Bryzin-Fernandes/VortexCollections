@@ -4,6 +4,11 @@ CREATE TABLE IF NOT EXISTS users (
   email VARCHAR(190) NOT NULL UNIQUE,
   password_hash VARCHAR(255) NOT NULL,
   role VARCHAR(20) NOT NULL DEFAULT 'customer' CHECK (role IN ('customer','admin')),
+  minecraft_nick VARCHAR(16),
+  profile_public BOOLEAN NOT NULL DEFAULT TRUE,
+  avatar_mode VARCHAR(20) NOT NULL DEFAULT 'minecraft',
+  avatar_url TEXT,
+  banner_url TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 

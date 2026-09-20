@@ -1,6 +1,7 @@
 const net = require('net');
 const { Readable } = require('stream');
 const { pipeline } = require('stream/promises');
+const { customerStats, publicRanking, publicProfile } = require('./customer-progress');
 const details = {
   'vortex-bedwars': 'Minigame BedWars para o seu servidor Minecraft.',
   'vortex-kitpvp': 'Espectador, Double Kit, Random Teleporte Kit, leaderboard clicável, evento FPS e 1v1.',
@@ -29,11 +30,23 @@ function install({ app, pool, auth, bcrypt, vault, fingerprint, createLicenseKey
     FROM licenses l JOIN products p ON p.id=l.product_id JOIN orders o ON o.id=l.order_id
     WHERE l.id=$1 AND l.user_id=$2 AND l.status='active' AND o.status='approved' AND (l.source <> 'subscription' OR EXISTS(SELECT 1 FROM subscriptions s WHERE s.id=l.subscription_id AND s.status='active' AND s.current_period_end>NOW()))
   `, [id, user])).rows[0];
+  app.get('/api/public/ranking', wrap(async (req, res) => {
+    const limit = Math.min(50, Math.max(1, Number(req.query.limit) || 10));
+    res.json(await publicRanking(pool, limit));
+  }));
+  app.get('/api/public/users/:id', wrap(async (req, res) => {
+    if (!/^\d+$/.test(req.params.id)) return res.sendStatus(404);
+    const profile = await publicProfile(pool, req.params.id);
+    if (!profile) return res.status(404).json({ error: 'Este perfil não está disponível publicamente.' });
+    res.json(profile);
+  }));
   app.get('/api/me', auth, wrap(async (req, res) => {
-    const user = (await pool.query('SELECT id,name,email,role,minecraft_nick,created_at FROM users WHERE id=$1', [req.user.sub])).rows[0];
+    const user = (await pool.query(`SELECT id,name,email,role,minecraft_nick,profile_public,avatar_mode,avatar_url,banner_url,created_at
+      FROM users WHERE id=$1`, [req.user.sub])).rows[0];
     if (!user) return res.status(401).json({ error: 'Conta não encontrada.' });
     const isSupport = (await pool.query('SELECT 1 FROM support_agents WHERE user_id=$1 AND active=TRUE', [user.id])).rowCount > 0;
-    res.json({ ...user, is_support: isSupport, is_admin: user.role === 'admin' && Boolean(process.env.ADMIN_USER_ID) && String(user.id) === String(process.env.ADMIN_USER_ID) });
+    const stats = await customerStats(pool, user.id);
+    res.json({ ...user, ...stats, is_support: isSupport, is_admin: user.role === 'admin' && Boolean(process.env.ADMIN_USER_ID) && String(user.id) === String(process.env.ADMIN_USER_ID) });
   }));
   app.get('/api/me/orders', auth, wrap(async (req, res) => {
     res.json((await pool.query(`SELECT o.id,o.status,o.amount_cents,o.created_at,p.name AS product

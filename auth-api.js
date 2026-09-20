@@ -1,5 +1,14 @@
 // Cloudflare Turnstile is verified here, never just in the browser.
 const crypto = require('crypto');
+function optionalHttpsUrl(value, label) {
+  const raw = typeof value === 'string' ? value.trim() : '';
+  if (!raw) return null;
+  if (raw.length > 1000) throw Object.assign(Error(`${label} muito grande.`), { status: 400 });
+  let parsed;
+  try { parsed = new URL(raw); } catch (_) { throw Object.assign(Error(`${label} inválido.`), { status: 400 }); }
+  if (parsed.protocol !== 'https:') throw Object.assign(Error(`${label} deve começar com https://.`), { status: 400 });
+  return parsed.toString();
+}
 function captchaConfig(env = process.env) {
   const enabled = env.TURNSTILE_ENABLED !== 'false';
   const siteKey = env.TURNSTILE_SITE_KEY || '';
@@ -63,8 +72,17 @@ function install({ app, pool, bcrypt, issueToken, auth }) {
   app.patch('/api/me/profile', auth, wrap(async (req,res) => {
     const name = typeof req.body.name === 'string' ? req.body.name.trim() : '';
     const nick = typeof req.body.minecraft_nick === 'string' ? req.body.minecraft_nick.trim() : '';
-    if(!name || name.length>120 || (nick && !/^[a-zA-Z0-9_]{3,16}$/.test(nick))) return res.status(400).json({error:'Confira o nome e o nick (3 a 16 letras, números ou _).'});
-    const user = (await pool.query('UPDATE users SET name=$1,minecraft_nick=$2 WHERE id=$3 RETURNING id,name,email,role,minecraft_nick', [name,nick||null,req.user.sub])).rows[0];
+    const avatarMode = req.body.avatar_mode === undefined ? null : String(req.body.avatar_mode);
+    if(!name || name.length>120 || (nick && !/^[a-zA-Z0-9_]{3,16}$/.test(nick)) || (avatarMode && !['minecraft','custom'].includes(avatarMode)))
+      return res.status(400).json({error:'Confira o nome, o nick e o tipo de avatar.'});
+    const current = (await pool.query('SELECT profile_public,avatar_mode,avatar_url,banner_url FROM users WHERE id=$1', [req.user.sub])).rows[0];
+    if(!current) return res.sendStatus(401);
+    const profilePublic = req.body.profile_public === undefined ? current.profile_public !== false : req.body.profile_public === true || req.body.profile_public === 'true';
+    const nextAvatarMode = avatarMode || current.avatar_mode || 'minecraft';
+    const avatarUrl = req.body.avatar_url === undefined ? current.avatar_url : optionalHttpsUrl(req.body.avatar_url, 'URL do avatar');
+    const bannerUrl = req.body.banner_url === undefined ? current.banner_url : optionalHttpsUrl(req.body.banner_url, 'URL do banner');
+    const user = (await pool.query(`UPDATE users SET name=$1,minecraft_nick=$2,profile_public=$3,avatar_mode=$4,avatar_url=$5,banner_url=$6
+      WHERE id=$7 RETURNING id,name,email,role,minecraft_nick,profile_public,avatar_mode,avatar_url,banner_url`, [name,nick||null,profilePublic,nextAvatarMode,avatarUrl,bannerUrl,req.user.sub])).rows[0];
     if(!user) return res.sendStatus(401);
     res.json(user);
   }));
